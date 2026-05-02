@@ -1,6 +1,5 @@
 import type { SdkSessionInfo } from "./types.js";
 import type { ContentBlock } from "./types.js";
-import { captureEvent, captureException } from "./analytics.js";
 
 const BASE = "/api";
 const AUTH_STORAGE_KEY = "companion_auth_token";
@@ -22,170 +21,72 @@ function handle401(status: number): void {
   }
 }
 
-function nowMs(): number {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
-    return performance.now();
-  }
-  return Date.now();
-}
-
-function trackApiSuccess(method: string, path: string, durationMs: number, status: number): void {
-  captureEvent("api_request_succeeded", {
-    method,
-    path,
-    status,
-    duration_ms: Math.round(durationMs),
-  });
-}
-
-function trackApiFailure(
-  method: string,
-  path: string,
-  durationMs: number,
-  error: unknown,
-  status?: number,
-): void {
-  captureEvent("api_request_failed", {
-    method,
-    path,
-    status,
-    duration_ms: Math.round(durationMs),
-    error: error instanceof Error ? error.message : String(error),
-  });
-  captureException(error, { method, path, status });
-}
-
 async function post<T = unknown>(path: string, body?: object): Promise<T> {
-  const startedAt = nowMs();
-  let failureTracked = false;
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      handle401(res.status);
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const apiError = new Error(err.error || res.statusText);
-      trackApiFailure("POST", path, nowMs() - startedAt, apiError, res.status);
-      failureTracked = true;
-      throw apiError;
-    }
-    trackApiSuccess("POST", path, nowMs() - startedAt, res.status);
-    return res.json();
-  } catch (error) {
-    if (!failureTracked) {
-      trackApiFailure("POST", path, nowMs() - startedAt, error);
-    }
-    throw error;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
+  return res.json();
 }
 
 async function get<T = unknown>(path: string): Promise<T> {
-  const startedAt = nowMs();
-  let failureTracked = false;
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      headers: { ...getAuthHeaders() },
-    });
-    if (!res.ok) {
-      handle401(res.status);
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const apiError = new Error(err.error || res.statusText);
-      trackApiFailure("GET", path, nowMs() - startedAt, apiError, res.status);
-      failureTracked = true;
-      throw apiError;
-    }
-    trackApiSuccess("GET", path, nowMs() - startedAt, res.status);
-    return res.json();
-  } catch (error) {
-    if (!failureTracked) {
-      trackApiFailure("GET", path, nowMs() - startedAt, error);
-    }
-    throw error;
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { ...getAuthHeaders() },
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
+  return res.json();
 }
 
 async function put<T = unknown>(path: string, body?: object): Promise<T> {
-  const startedAt = nowMs();
-  let failureTracked = false;
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      handle401(res.status);
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const apiError = new Error(err.error || res.statusText);
-      trackApiFailure("PUT", path, nowMs() - startedAt, apiError, res.status);
-      failureTracked = true;
-      throw apiError;
-    }
-    trackApiSuccess("PUT", path, nowMs() - startedAt, res.status);
-    return res.json();
-  } catch (error) {
-    if (!failureTracked) {
-      trackApiFailure("PUT", path, nowMs() - startedAt, error);
-    }
-    throw error;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
+  return res.json();
 }
 
 async function patch<T = unknown>(path: string, body?: object): Promise<T> {
-  const startedAt = nowMs();
-  let failureTracked = false;
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      handle401(res.status);
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const apiError = new Error(err.error || res.statusText);
-      trackApiFailure("PATCH", path, nowMs() - startedAt, apiError, res.status);
-      failureTracked = true;
-      throw apiError;
-    }
-    trackApiSuccess("PATCH", path, nowMs() - startedAt, res.status);
-    return res.json();
-  } catch (error) {
-    if (!failureTracked) {
-      trackApiFailure("PATCH", path, nowMs() - startedAt, error);
-    }
-    throw error;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
+  return res.json();
 }
 
 async function del<T = unknown>(path: string, body?: object): Promise<T> {
-  const startedAt = nowMs();
-  let failureTracked = false;
-  try {
-    const res = await fetch(`${BASE}${path}`, {
-      method: "DELETE",
-      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...getAuthHeaders() },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      handle401(res.status);
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      const apiError = new Error(err.error || res.statusText);
-      trackApiFailure("DELETE", path, nowMs() - startedAt, apiError, res.status);
-      failureTracked = true;
-      throw apiError;
-    }
-    trackApiSuccess("DELETE", path, nowMs() - startedAt, res.status);
-    return res.json();
-  } catch (error) {
-    if (!failureTracked) {
-      trackApiFailure("DELETE", path, nowMs() - startedAt, error);
-    }
-    throw error;
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...getAuthHeaders() },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
+  return res.json();
 }
 
 export interface ContainerCreateOpts {
@@ -380,15 +281,10 @@ export interface BrowserStartResult {
 }
 
 export interface AppSettings {
-  anthropicApiKeyConfigured: boolean;
-  anthropicModel: string;
   claudeCodeOAuthTokenConfigured: boolean;
   openaiApiKeyConfigured: boolean;
   codexDeviceAuthConfigured: boolean;
   onboardingCompleted: boolean;
-  aiValidationEnabled: boolean;
-  aiValidationAutoApprove: boolean;
-  aiValidationAutoDeny: boolean;
   publicUrl: string;
   updateChannel: "stable" | "prerelease";
   dockerAutoUpdate: boolean;
@@ -659,8 +555,6 @@ export const api = {
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
   updateSettings: (data: {
-    anthropicApiKey?: string;
-    anthropicModel?: string;
     claudeCodeOAuthToken?: string;
     openaiApiKey?: string;
     onboardingCompleted?: boolean;
@@ -668,8 +562,6 @@ export const api = {
     updateChannel?: "stable" | "prerelease";
     dockerAutoUpdate?: boolean;
   }) => put<AppSettings>("/settings", data),
-  verifyAnthropicKey: (apiKey: string) =>
-    post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
 
   // Git operations
   getRepoInfo: (path: string) =>

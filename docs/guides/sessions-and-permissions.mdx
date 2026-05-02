@@ -131,27 +131,6 @@ Bypass mode removes all safety gates. Only use this in isolated environments or 
 
 You can change the permission mode at any time during a session. The change takes effect immediately for all subsequent tool calls.
 
-### AI validation
-
-AI validation uses a separate model to evaluate tool calls before execution. It categorizes each request as safe, dangerous, or uncertain.
-
-#### Setup
-
-1. Go to **Settings** and enter your **Anthropic API key**
-2. Toggle **AI Validation** on
-
-#### Categories
-
-| Category | Behavior |
-|---|---|
-| **Safe** (read-only, benign commands) | Auto-approved if "auto-approve safe" is enabled |
-| **Dangerous** (destructive commands like `rm -rf`) | Auto-denied if "auto-deny dangerous" is enabled |
-| **Uncertain** | Shown to you with the AI's recommendation |
-
-#### Per-session override
-
-Click the **shield icon** in the session header to toggle AI validation on or off for that specific session, overriding the global setting.
-
 ## Session recovery
 
 ### Automatic persistence

@@ -318,7 +318,6 @@ export type BrowserOutgoingMessage =
   | { type: "mcp_toggle"; serverName: string; enabled: boolean; client_msg_id?: string }
   | { type: "mcp_reconnect"; serverName: string; client_msg_id?: string }
   | { type: "mcp_set_servers"; servers: Record<string, McpServerConfig>; client_msg_id?: string }
-  | { type: "set_ai_validation"; aiValidationEnabled?: boolean | null; aiValidationAutoApprove?: boolean | null; aiValidationAutoDeny?: boolean | null; client_msg_id?: string }
   | { type: "end_session"; reason?: string; client_msg_id?: string }
   | { type: "stop_task"; task_id: string; client_msg_id?: string }
   | { type: "update_environment_variables"; variables: Record<string, string>; client_msg_id?: string };
@@ -343,7 +342,6 @@ export type BrowserIncomingMessageBase =
   | { type: "result"; data: CLIResultMessage }
   | { type: "permission_request"; request: PermissionRequest }
   | { type: "permission_cancelled"; request_id: string }
-  | { type: "permission_auto_resolved"; request: PermissionRequest; behavior: "allow" | "deny"; reason: string }
   | { type: "tool_progress"; tool_use_id: string; tool_name: string; elapsed_time_seconds: number }
   | { type: "tool_use_summary"; summary: string; tool_use_ids: string[] }
   | { type: "status_change"; status: "compacting" | "idle" | "running" | null }
@@ -412,12 +410,6 @@ export interface SessionState {
     primary: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null;
     secondary: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null;
   };
-  /** Per-session AI validation override. null/undefined = use global default */
-  aiValidationEnabled?: boolean | null;
-  /** Per-session auto-approve override. null/undefined = use global default */
-  aiValidationAutoApprove?: boolean | null;
-  /** Per-session auto-deny override. null/undefined = use global default */
-  aiValidationAutoDeny?: boolean | null;
 }
 
 // ─── MCP Types ───────────────────────────────────────────────────────────────
@@ -454,12 +446,6 @@ export type PermissionUpdate =
   | { type: "addDirectories"; directories: string[]; destination: PermissionDestination }
   | { type: "removeDirectories"; directories: string[]; destination: PermissionDestination };
 
-export interface AiValidationInfo {
-  verdict: "safe" | "dangerous" | "uncertain";
-  reason: string;
-  ruleBasedOnly: boolean;
-}
-
 export interface PermissionRequest {
   request_id: string;
   tool_name: string;
@@ -473,7 +459,6 @@ export interface PermissionRequest {
   blocked_path?: string;
   decision_reason?: string;
   timestamp: number;
-  ai_validation?: AiValidationInfo;
 }
 
 // ─── Session Creation Progress (SSE streaming) ──────────────────────────────

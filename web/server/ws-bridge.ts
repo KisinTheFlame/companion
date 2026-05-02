@@ -3,7 +3,6 @@ import type {
   BrowserOutgoingMessage,
   BrowserIncomingMessage,
   SessionState,
-  PermissionRequest,
   BackendType,
   McpServerConfig,
 } from "./session-types.js";
@@ -39,14 +38,9 @@ import {
   EVENT_BUFFER_LIMIT,
 } from "./ws-bridge-publish.js";
 import {
-  handleSetAiValidation,
-} from "./ws-bridge-controls.js";
-import {
   handleSessionSubscribe,
   handleSessionAck,
 } from "./ws-bridge-browser.js";
-import { validatePermission } from "./ai-validator.js";
-import { getEffectiveAiValidation } from "./ai-validation-settings.js";
 import { companionBus } from "./event-bus.js";
 import { SessionStateMachine } from "./session-state-machine.js";
 import { metricsCollector } from "./metrics-collector.js";
@@ -78,7 +72,6 @@ export class WsBridge {
   private sessions = new Map<string, Session>();
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
-  private autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
     "git_branch",
@@ -169,10 +162,6 @@ export class WsBridge {
       // Resolve git info for restored sessions (may have been persisted without it)
       resolveSessionGitInfo(session.id, session.state);
       this.sessions.set(p.id, session);
-      // Restored sessions with completed turns don't need auto-naming re-triggered
-      if (session.state.num_turns > 0) {
-        this.autoNamingAttempted.add(session.id);
-      }
       count++;
     }
     if (count > 0) {
@@ -309,7 +298,6 @@ export class WsBridge {
     this.cancelDisconnectTimer(sessionId);
     this.stopIdleKillWatchdog(sessionId);
     this.sessions.delete(sessionId);
-    this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
   }
 
@@ -357,7 +345,6 @@ export class WsBridge {
     session.browserSockets.clear();
 
     this.sessions.delete(sessionId);
-    this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
   }
 
@@ -509,45 +496,12 @@ export class WsBridge {
         session.stateMachine.transition("ready", "turn_completed");
         this.persistSession(session);
         companionBus.emit("message:result", { sessionId: session.id, message: msg });
-
-        // Trigger auto-naming after first successful result
-        if (
-          !(resultData as { is_error?: boolean }).is_error &&
-          !this.autoNamingAttempted.has(session.id)
-        ) {
-          this.autoNamingAttempted.add(session.id);
-          const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
-          if (firstUserMsg && firstUserMsg.type === "user_message") {
-            companionBus.emit("session:first-turn-completed", { sessionId: session.id, firstUserMessage: firstUserMsg.content });
-          }
-        }
       }
 
-      // -- permission_request: AI validation, add to pending ---------------
+      // -- permission_request: add to pending ------------------------------
       if (msg.type === "permission_request") {
         const perm = msg.request;
         metricsCollector.recordPermissionRequested(perm.request_id, session.id);
-
-        // AI Validation Mode: evaluate the tool call before showing to user
-        const aiSettings = getEffectiveAiValidation(session.state);
-        if (
-          aiSettings.enabled
-          && aiSettings.anthropicApiKey
-          && perm.tool_name !== "AskUserQuestion"
-          && perm.tool_name !== "ExitPlanMode"
-        ) {
-          // Run AI validation async
-          this.handleAiValidation(session, adapter, perm).catch((err) => {
-            console.warn(`[ws-bridge] AI validation error for tool=${perm.tool_name} request_id=${perm.request_id} session=${session.id}, falling through to manual:`, err);
-            // On error, fall through to normal permission flow
-            session.pendingPermissions.set(perm.request_id, perm);
-            session.stateMachine.transition("awaiting_permission", "ai_validation_error_fallback");
-            this.persistSession(session);
-            this.broadcastToBrowsers(session, msg);
-          });
-          return; // Don't broadcast yet — AI validation is async
-        }
-
         session.pendingPermissions.set(perm.request_id, perm);
         session.stateMachine.transition("awaiting_permission", "permission_requested");
         this.persistSession(session);
@@ -658,70 +612,6 @@ export class WsBridge {
     log.info("ws-bridge", "Backend adapter attached", {
       sessionId,
       backendType: session.backendType,
-    });
-  }
-
-  /** AI validation for permission requests — shared by Claude and Codex paths. */
-  private async handleAiValidation(
-    session: Session,
-    adapter: IBackendAdapter,
-    perm: PermissionRequest,
-  ): Promise<void> {
-    const aiSettings = getEffectiveAiValidation(session.state);
-    const result = await validatePermission(
-      perm.tool_name,
-      perm.input,
-      perm.description,
-    );
-
-    perm.ai_validation = {
-      verdict: result.verdict,
-      reason: result.reason,
-      ruleBasedOnly: result.ruleBasedOnly,
-    };
-
-    // Auto-approve safe tools
-    if (result.verdict === "safe" && aiSettings.autoApprove) {
-      metricsCollector.recordPermissionResolved(perm.request_id, "allow", true);
-      this.broadcastToBrowsers(session, {
-        type: "permission_auto_resolved",
-        request: perm,
-        behavior: "allow",
-        reason: result.reason,
-      });
-      adapter.send({
-        type: "permission_response",
-        request_id: perm.request_id,
-        behavior: "allow",
-        updated_input: perm.input,
-      });
-      return;
-    }
-
-    // Auto-deny dangerous tools
-    if (result.verdict === "dangerous" && aiSettings.autoDeny) {
-      metricsCollector.recordPermissionResolved(perm.request_id, "deny", true);
-      this.broadcastToBrowsers(session, {
-        type: "permission_auto_resolved",
-        request: perm,
-        behavior: "deny",
-        reason: result.reason,
-      });
-      adapter.send({
-        type: "permission_response",
-        request_id: perm.request_id,
-        behavior: "deny",
-      });
-      return;
-    }
-
-    // Uncertain or auto-action disabled: fall through to manual
-    session.pendingPermissions.set(perm.request_id, perm);
-    session.stateMachine.transition("awaiting_permission", "ai_validation_manual_fallback");
-    this.persistSession(session);
-    this.broadcastToBrowsers(session, {
-      type: "permission_request",
-      request: perm,
     });
   }
 
@@ -1071,21 +961,6 @@ export class WsBridge {
       WsBridge.PROCESSED_CLIENT_MSG_ID_LIMIT,
       this.persistSession.bind(this),
     )) {
-      return;
-    }
-
-    // -- set_ai_validation: bridge-level, not forwarded to backend --------
-    if (msg.type === "set_ai_validation") {
-      handleSetAiValidation(session, msg);
-      this.persistSession(session);
-      this.broadcastToBrowsers(session, {
-        type: "session_update",
-        session: {
-          aiValidationEnabled: session.state.aiValidationEnabled,
-          aiValidationAutoApprove: session.state.aiValidationAutoApprove,
-          aiValidationAutoDeny: session.state.aiValidationAutoDeny,
-        },
-      });
       return;
     }
 

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
-import { captureException } from "../analytics.js";
 
 export function UpdateBanner() {
   const updateInfo = useStore((s) => s.updateInfo);
@@ -20,9 +19,8 @@ export function UpdateBanner() {
       await api.triggerUpdate();
       // Show the full-screen updating overlay
       useStore.getState().setUpdateOverlayActive(true);
-    } catch (err) {
+    } catch {
       localStorage.removeItem("companion_docker_prompt_pending");
-      captureException(err);
       setUpdating(false);
     }
   };

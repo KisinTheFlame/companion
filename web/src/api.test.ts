@@ -1,14 +1,4 @@
 // @vitest-environment jsdom
-const { captureEventMock, captureExceptionMock } = vi.hoisted(() => ({
-  captureEventMock: vi.fn(),
-  captureExceptionMock: vi.fn(),
-}));
-
-vi.mock("./analytics.js", () => ({
-  captureEvent: captureEventMock,
-  captureException: captureExceptionMock,
-}));
-
 import { api } from "./api.js";
 
 const mockFetch = vi.fn();
@@ -25,8 +15,6 @@ function mockResponse(data: unknown, status = 200) {
 
 beforeEach(() => {
   mockFetch.mockReset();
-  captureEventMock.mockReset();
-  captureExceptionMock.mockReset();
 });
 
 // ===========================================================================
@@ -191,11 +179,6 @@ describe("post() error handling", () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ error: "Session not found" }, 404));
 
     await expect(api.killSession("nonexistent")).rejects.toThrow("Session not found");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "POST", path: "/sessions/nonexistent/kill", status: 404 }),
-    );
-    expect(captureExceptionMock).toHaveBeenCalled();
   });
 
   it("falls back to statusText when JSON body has no error field", async () => {
@@ -218,21 +201,12 @@ describe("get() error handling", () => {
     });
 
     await expect(api.listSessions()).rejects.toThrow("Forbidden");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "GET", path: "/sessions", status: 403 }),
-    );
   });
 
-  it("captures network failures", async () => {
+  it("propagates network failures", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network down"));
 
     await expect(api.listSessions()).rejects.toThrow("Network down");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "GET", path: "/sessions" }),
-    );
-    expect(captureExceptionMock).toHaveBeenCalled();
   });
 });
 
@@ -299,7 +273,7 @@ describe("updateEnv", () => {
 // ===========================================================================
 describe("settings", () => {
   it("sends GET to /api/settings", async () => {
-    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4-6" };
+    const settings = { claudeCodeOAuthTokenConfigured: true, openaiApiKeyConfigured: false };
     mockFetch.mockResolvedValueOnce(mockResponse(settings));
 
     const result = await api.getSettings();
@@ -310,37 +284,15 @@ describe("settings", () => {
   });
 
   it("sends PUT to /api/settings", async () => {
-    const settings = { anthropicApiKeyConfigured: true, anthropicModel: "claude-sonnet-4-6" };
+    const settings = { claudeCodeOAuthTokenConfigured: true };
     mockFetch.mockResolvedValueOnce(mockResponse(settings));
 
-    await api.updateSettings({ anthropicApiKey: "sk-ant-key" });
+    await api.updateSettings({ claudeCodeOAuthToken: "tok-123" });
 
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe("/api/settings");
     expect(opts.method).toBe("PUT");
-    expect(JSON.parse(opts.body)).toEqual({ anthropicApiKey: "sk-ant-key" });
-  });
-
-  it("verifyAnthropicKey sends POST to /api/settings/anthropic/verify", async () => {
-    const data = { valid: true };
-    mockFetch.mockResolvedValueOnce(mockResponse(data));
-
-    const result = await api.verifyAnthropicKey("sk-ant-api03-test-key");
-
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/settings/anthropic/verify");
-    expect(opts.method).toBe("POST");
-    expect(JSON.parse(opts.body)).toEqual({ apiKey: "sk-ant-api03-test-key" });
-    expect(result).toEqual({ valid: true });
-  });
-
-  it("verifyAnthropicKey returns error when key is invalid", async () => {
-    const data = { valid: false, error: "Invalid API key" };
-    mockFetch.mockResolvedValueOnce(mockResponse(data));
-
-    const result = await api.verifyAnthropicKey("bad-key");
-
-    expect(result).toEqual({ valid: false, error: "Invalid API key" });
+    expect(JSON.parse(opts.body)).toEqual({ claudeCodeOAuthToken: "tok-123" });
   });
 });
 
@@ -1296,10 +1248,6 @@ describe("put() error handling", () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ error: "Env not found" }, 404));
 
     await expect(api.updateEnv("missing", { name: "X" })).rejects.toThrow("Env not found");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "PUT", status: 404 }),
-    );
   });
 });
 
@@ -1308,10 +1256,6 @@ describe("patch() error handling", () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ error: "Name too long" }, 400));
 
     await expect(api.renameSession("sess-1", "x".repeat(500))).rejects.toThrow("Name too long");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "PATCH", status: 400 }),
-    );
   });
 });
 
@@ -1320,10 +1264,6 @@ describe("del() error handling", () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ error: "Cannot delete active session" }, 409));
 
     await expect(api.deleteSession("active-sess")).rejects.toThrow("Cannot delete active session");
-    expect(captureEventMock).toHaveBeenCalledWith(
-      "api_request_failed",
-      expect.objectContaining({ method: "DELETE", status: 409 }),
-    );
   });
 });
 

@@ -75,27 +75,19 @@ vi.mock("./session-names.js", () => ({
 }));
 
 vi.mock("./settings-manager.js", () => ({
-  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4-6",
   getSettings: vi.fn(() => ({
-    anthropicApiKey: "",
-    anthropicModel: "claude-sonnet-4-6",
     claudeCodeOAuthToken: "",
     openaiApiKey: "",
     onboardingCompleted: false,
-    aiValidationEnabled: false,
-    aiValidationAutoApprove: true,
-    aiValidationAutoDeny: false,
     publicUrl: "",
     updateChannel: "stable",
     dockerAutoUpdate: false,
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
-    anthropicApiKey: patch.anthropicApiKey ?? "",
-    anthropicModel: patch.anthropicModel ?? "claude-sonnet-4-6",
-    aiValidationEnabled: patch.aiValidationEnabled ?? false,
-    aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
-    aiValidationAutoDeny: patch.aiValidationAutoDeny ?? false,
+    claudeCodeOAuthToken: patch.claudeCodeOAuthToken ?? "",
+    openaiApiKey: patch.openaiApiKey ?? "",
+    onboardingCompleted: patch.onboardingCompleted ?? false,
     publicUrl: patch.publicUrl ?? "",
     updateChannel: patch.updateChannel ?? "stable",
     dockerAutoUpdate: patch.dockerAutoUpdate ?? false,
@@ -1108,16 +1100,11 @@ describe("POST /api/images/:tag/pull", () => {
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 describe("GET /api/settings", () => {
-  it("returns settings status without exposing the key", async () => {
+  it("returns settings status without exposing tokens", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      anthropicApiKey: "or-secret",
-      anthropicModel: "claude-sonnet-4-6",
-      claudeCodeOAuthToken: "",
+      claudeCodeOAuthToken: "secret-token",
       openaiApiKey: "",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -1129,51 +1116,10 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
-      anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4-6",
-      claudeCodeOAuthTokenConfigured: false,
+      claudeCodeOAuthTokenConfigured: true,
       openaiApiKeyConfigured: false,
       codexDeviceAuthConfigured: false,
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-    });
-  });
-
-  it("reports key as not configured when empty", async () => {
-    vi.mocked(settingsManager.getSettings).mockReturnValue({
-      anthropicApiKey: "",
-      anthropicModel: "openai/gpt-4o-mini",
-      claudeCodeOAuthToken: "",
-      openaiApiKey: "",
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 123,
-    });
-
-    const res = await app.request("/api/settings", { method: "GET" });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({
-      anthropicApiKeyConfigured: false,
-      anthropicModel: "openai/gpt-4o-mini",
-      claudeCodeOAuthTokenConfigured: false,
-      openaiApiKeyConfigured: false,
-      codexDeviceAuthConfigured: false,
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -1183,14 +1129,9 @@ describe("GET /api/settings", () => {
   // Verifies publicUrl is included in GET response when set to a non-empty value
   it("includes publicUrl in response when configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4-6",
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "https://example.com",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -1206,136 +1147,6 @@ describe("GET /api/settings", () => {
 });
 
 describe("PUT /api/settings", () => {
-  it("updates settings", async () => {
-    vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      anthropicApiKey: "new-key",
-      anthropicModel: "claude-sonnet-4-6",
-      claudeCodeOAuthToken: "",
-      openaiApiKey: "",
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 456,
-    });
-
-    const res = await app.request("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anthropicApiKey: "new-key" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      anthropicApiKey: "new-key",
-      anthropicModel: undefined,
-      aiValidationEnabled: undefined,
-      aiValidationAutoApprove: undefined,
-      aiValidationAutoDeny: undefined,
-      updateChannel: undefined,
-    });
-    const json = await res.json();
-    expect(json).toEqual({
-      anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4-6",
-      claudeCodeOAuthTokenConfigured: false,
-      openaiApiKeyConfigured: false,
-      codexDeviceAuthConfigured: false,
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-    });
-  });
-
-  it("trims key and falls back to default model for blank value", async () => {
-    vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      anthropicApiKey: "trimmed-key",
-      anthropicModel: "claude-sonnet-4-6",
-      claudeCodeOAuthToken: "",
-      openaiApiKey: "",
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 789,
-    });
-
-    const res = await app.request("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anthropicApiKey: "  trimmed-key  ", anthropicModel: "   ", linearApiKey: "  lin_api_trimmed  " }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      anthropicApiKey: "trimmed-key",
-      anthropicModel: "claude-sonnet-4-6",
-    });
-  });
-
-  it("updates only model without overriding key", async () => {
-    vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      anthropicApiKey: "existing-key",
-      anthropicModel: "openai/gpt-4o-mini",
-      claudeCodeOAuthToken: "",
-      openaiApiKey: "",
-      onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 999,
-    });
-
-    const res = await app.request("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anthropicModel: "openai/gpt-4o-mini" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      anthropicApiKey: undefined,
-      anthropicModel: "openai/gpt-4o-mini",
-    });
-  });
-
-  it("returns 400 for non-string model", async () => {
-    const res = await app.request("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anthropicApiKey: "new-key", anthropicModel: 123 }),
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json).toEqual({ error: "anthropicModel must be a string" });
-  });
-
-  it("returns 400 for non-string key", async () => {
-    const res = await app.request("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anthropicApiKey: 123 }),
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json).toEqual({ error: "anthropicApiKey must be a string" });
-  });
-
   // Rejects invalid updateChannel values that aren't "stable" or "prerelease"
   it("returns 400 for invalid updateChannel value", async () => {
     const res = await app.request("/api/settings", {
@@ -1353,14 +1164,9 @@ describe("PUT /api/settings", () => {
   // it (trimmed, trailing-slash-stripped) to updateSettings
   it("accepts and saves publicUrl string", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4-6",
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "https://my-server.com",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -1468,92 +1274,6 @@ describe("PUT /api/settings", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toEqual({ error: "dockerAutoUpdate must be a boolean" });
-  });
-});
-
-describe("POST /api/settings/anthropic/verify", () => {
-  it("returns 400 when no apiKey provided", async () => {
-    // Verifies the endpoint rejects requests that omit the apiKey field
-    const res = await app.request("/api/settings/anthropic/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json).toEqual({ valid: false, error: "API key is required" });
-  });
-
-  it("returns valid:true when fetch succeeds", async () => {
-    // Verifies successful Anthropic API key validation when the upstream API responds ok
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await app.request("/api/settings/anthropic/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: "sk-ant-valid-key" }),
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ valid: true });
-
-    // Verify the correct Anthropic API endpoint and headers were used
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.anthropic.com/v1/models",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          "x-api-key": "sk-ant-valid-key",
-          "anthropic-version": "2023-06-01",
-        }),
-      }),
-    );
-
-    vi.unstubAllGlobals();
-  });
-
-  it("returns valid:false with error when fetch returns non-ok", async () => {
-    // Verifies the endpoint correctly reports invalid keys when the Anthropic API rejects them
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await app.request("/api/settings/anthropic/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: "sk-ant-invalid-key" }),
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ valid: false, error: "API returned 401" });
-
-    vi.unstubAllGlobals();
-  });
-
-  it("returns valid:false when fetch throws", async () => {
-    // Verifies graceful error handling when the network request itself fails
-    const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await app.request("/api/settings/anthropic/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: "sk-ant-some-key" }),
-    });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json).toEqual({ valid: false, error: "Request failed" });
-
-    vi.unstubAllGlobals();
   });
 });
 

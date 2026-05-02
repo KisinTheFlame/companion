@@ -20,12 +20,6 @@ export interface CompanionEventMap {
   /** Idle-kill threshold reached with no connected browsers. */
   "session:idle-kill": { sessionId: string };
 
-  /** First non-error turn completed (triggers auto-naming). */
-  "session:first-turn-completed": {
-    sessionId: string;
-    firstUserMessage: string;
-  };
-
   /** Git info resolved for a session (branch and cwd known). */
   "session:git-info-ready": { sessionId: string; cwd: string; branch: string };
 

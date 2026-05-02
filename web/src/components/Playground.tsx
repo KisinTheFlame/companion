@@ -21,8 +21,6 @@ import type {
   SessionState,
   McpServerDetail,
 } from "../types.js";
-import { AiValidationBadge } from "./AiValidationBadge.js";
-import { AiValidationToggle } from "./AiValidationToggle.js";
 import { ToolExecutionBar } from "./ToolExecutionBar.js";
 import { ToolTurnSummary } from "./ToolTurnSummary.js";
 import type { ToolActivityEntry } from "../store/tasks-slice.js";
@@ -179,39 +177,6 @@ const PERM_DYNAMIC = mockPermission({
   tool_name: "dynamic:code_interpreter",
   input: { code: "print('hello from dynamic tool')" },
   description: "Custom tool call: code_interpreter",
-});
-
-// AI Validation mock: uncertain verdict (shown to user with recommendation)
-const PERM_AI_UNCERTAIN = mockPermission({
-  tool_name: "Bash",
-  input: { command: "npm install --save-dev @types/react" },
-  ai_validation: {
-    verdict: "uncertain",
-    reason: "Package installation modifies node_modules",
-    ruleBasedOnly: false,
-  },
-});
-
-// AI Validation mock: safe recommendation (shown when auto-approve is off)
-const PERM_AI_SAFE = mockPermission({
-  tool_name: "Bash",
-  input: { command: "git status" },
-  ai_validation: {
-    verdict: "safe",
-    reason: "Read-only git command",
-    ruleBasedOnly: false,
-  },
-});
-
-// AI Validation mock: dangerous recommendation (shown when auto-deny is off)
-const PERM_AI_DANGEROUS = mockPermission({
-  tool_name: "Bash",
-  input: { command: "rm -rf node_modules && rm -rf .git" },
-  ai_validation: {
-    verdict: "dangerous",
-    reason: "Recursive delete of project files",
-    ruleBasedOnly: false,
-  },
 });
 
 // Enriched permission fields (display_name, title, decision_reason) — v2.1.81+
@@ -887,86 +852,6 @@ export function Playground() {
                 permission={PERM_ASK_MULTI}
                 sessionId={MOCK_SESSION_ID}
               />
-            </Card>
-          </div>
-        </Section>
-
-        {/* ─── AI Validation ──────────────────────────────── */}
-        <Section
-          title="AI Validation"
-          description="AI-powered permission validation badges and recommendations"
-        >
-          <div className="space-y-4">
-            <Card label="Permission with AI recommendation (uncertain)">
-              <PermissionBanner
-                permission={PERM_AI_UNCERTAIN}
-                sessionId={MOCK_SESSION_ID}
-              />
-            </Card>
-            <Card label="Permission with AI recommendation (safe)">
-              <PermissionBanner
-                permission={PERM_AI_SAFE}
-                sessionId={MOCK_SESSION_ID}
-              />
-            </Card>
-            <Card label="Permission with AI recommendation (dangerous)">
-              <PermissionBanner
-                permission={PERM_AI_DANGEROUS}
-                sessionId={MOCK_SESSION_ID}
-              />
-            </Card>
-            <Card label="Per-session toggle (disabled)">
-              <PlaygroundAiValidationToggle enabled={false} />
-            </Card>
-            <Card label="Per-session toggle (enabled)">
-              <PlaygroundAiValidationToggle enabled={true} />
-            </Card>
-            <Card label="Auto-resolved badge (with dismiss)">
-              <div className="border border-cc-border rounded-xl overflow-hidden bg-cc-card">
-                <AiValidationBadge
-                  entry={{
-                    request: mockPermission({
-                      tool_name: "Read",
-                      input: { file_path: "/src/index.ts" },
-                    }),
-                    behavior: "allow",
-                    reason: "Read is a read-only tool",
-                    timestamp: Date.now(),
-                  }}
-                  onDismiss={() => alert("Dismissed!")}
-                />
-              </div>
-            </Card>
-            <Card label="Auto-resolved badge (denied, with dismiss)">
-              <div className="border border-cc-border rounded-xl overflow-hidden bg-cc-card">
-                <AiValidationBadge
-                  entry={{
-                    request: mockPermission({
-                      tool_name: "Bash",
-                      input: { command: "rm -rf /" },
-                    }),
-                    behavior: "deny",
-                    reason: "Recursive delete of root directory",
-                    timestamp: Date.now(),
-                  }}
-                  onDismiss={() => alert("Dismissed!")}
-                />
-              </div>
-            </Card>
-            <Card label="Auto-resolved badge (no dismiss)">
-              <div className="border border-cc-border rounded-xl overflow-hidden bg-cc-card">
-                <AiValidationBadge
-                  entry={{
-                    request: mockPermission({
-                      tool_name: "Grep",
-                      input: { pattern: "TODO", path: "/src" },
-                    }),
-                    behavior: "allow",
-                    reason: "Grep is a read-only tool",
-                    timestamp: Date.now(),
-                  }}
-                />
-              </div>
             </Card>
           </div>
         </Section>
@@ -3568,68 +3453,6 @@ function TaskRow({ task }: { task: TaskItem }) {
           </span>
         </p>
       )}
-    </div>
-  );
-}
-
-// ─── Inline AiValidationToggle playground wrapper ───────────────────────────
-
-const PLAYGROUND_AI_VALIDATION_SESSION = "ai-validation-playground";
-
-function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {
-  useEffect(() => {
-    const store = useStore.getState();
-    const prev = store.sessions.get(PLAYGROUND_AI_VALIDATION_SESSION);
-    store.updateSession(PLAYGROUND_AI_VALIDATION_SESSION, {
-      session_id: PLAYGROUND_AI_VALIDATION_SESSION,
-      model: "claude-sonnet-4-20250514",
-      cwd: "/workspace",
-      tools: [],
-      permissionMode: "default",
-      claude_code_version: "1.0.0",
-      mcp_servers: [],
-      agents: [],
-      slash_commands: [],
-      skills: [],
-      total_cost_usd: 0,
-      num_turns: 0,
-      context_used_percent: 0,
-      is_compacting: false,
-      git_branch: "main",
-      is_worktree: false,
-      is_containerized: false,
-      repo_root: "/workspace",
-      git_ahead: 0,
-      git_behind: 0,
-      total_lines_added: 0,
-      total_lines_removed: 0,
-      aiValidationEnabled: enabled,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
-      ...prev,
-    });
-    return () => {
-      if (prev) {
-        useStore
-          .getState()
-          .updateSession(PLAYGROUND_AI_VALIDATION_SESSION, prev);
-      }
-    };
-  }, [enabled]);
-
-  // Force the enabled state each render to match the prop
-  useEffect(() => {
-    useStore
-      .getState()
-      .setSessionAiValidation(PLAYGROUND_AI_VALIDATION_SESSION, {
-        aiValidationEnabled: enabled,
-      });
-  }, [enabled]);
-
-  return (
-    <div className="flex items-center gap-2 p-2">
-      <AiValidationToggle sessionId={PLAYGROUND_AI_VALIDATION_SESSION} />
-      <span className="text-xs text-cc-muted">Click to toggle</span>
     </div>
   );
 }

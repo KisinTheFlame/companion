@@ -1,17 +1,13 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
-import { captureException } from "../analytics.js";
 import { MessageFeed } from "./MessageFeed.js";
 import { Composer } from "./Composer.js";
 import { PermissionBanner } from "./PermissionBanner.js";
-import { AiValidationBadge } from "./AiValidationBadge.js";
 import { ActivityTray } from "./ActivityTray.js";
 
 export function ChatView({ sessionId }: { sessionId: string }) {
   const sessionPerms = useStore((s) => s.pendingPermissions.get(sessionId));
-  const aiResolved = useStore((s) => s.aiResolvedPermissions.get(sessionId));
-  const clearAiResolvedPermissions = useStore((s) => s.clearAiResolvedPermissions);
   const connStatus = useStore(
     (s) => s.connectionStatus.get(sessionId) ?? "disconnected"
   );
@@ -40,7 +36,6 @@ export function ChatView({ sessionId }: { sessionId: string }) {
     try {
       await api.relaunchSession(sessionId);
     } catch (err) {
-      captureException(err);
       setCliReconnecting(sessionId, false);
       const msg =
         err instanceof Error ? err.message : "Reconnection failed";
@@ -113,16 +108,6 @@ export function ChatView({ sessionId }: { sessionId: string }) {
         <MessageFeed sessionId={sessionId} />
         <ActivityTray sessionId={sessionId} />
       </div>
-
-      {/* AI auto-resolved notification (most recent only) */}
-      {aiResolved && aiResolved.length > 0 && (
-        <div className="shrink-0 border-t border-cc-border bg-cc-card">
-          <AiValidationBadge
-            entry={aiResolved[aiResolved.length - 1]}
-            onDismiss={() => clearAiResolvedPermissions(sessionId)}
-          />
-        </div>
-      )}
 
       {/* Permission banners */}
       {perms.length > 0 && (

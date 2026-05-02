@@ -52,7 +52,6 @@ export const useStore = create<AppState>((...args) => ({
       streamingOutputTokens: new Map(),
       // Permissions
       pendingPermissions: new Map(),
-      aiResolvedPermissions: new Map(),
       // Tasks
       sessionTasks: new Map(),
       changedFilesTick: new Map(),

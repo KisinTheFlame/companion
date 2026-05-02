@@ -7,7 +7,6 @@ import { ClaudeConfigBrowser } from "./ClaudeConfigBrowser.js";
 import { SECTION_DEFINITIONS } from "./task-panel-sections.js";
 import { formatResetTime, formatCodexResetTime, formatWindowDuration, formatTokenCount } from "../utils/format.js";
 import { timeAgo } from "../utils/time-ago.js";
-import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
@@ -538,8 +537,7 @@ function GitBranchSection({ sessionId }: { sessionId: string }) {
                     git_ahead: r.git_ahead,
                     git_behind: r.git_behind,
                   });
-                  if (!r.success) captureException(new Error(`git pull failed: ${r.output}`));
-                }).catch((e) => captureException(e));
+                }).catch(() => {});
               }}
               title="Pull latest changes"
             >

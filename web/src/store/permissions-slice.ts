@@ -4,22 +4,13 @@ import type { PermissionRequest } from "../types.js";
 
 export interface PermissionsSlice {
   pendingPermissions: Map<string, Map<string, PermissionRequest>>;
-  aiResolvedPermissions: Map<string, Array<{
-    request: PermissionRequest;
-    behavior: "allow" | "deny";
-    reason: string;
-    timestamp: number;
-  }>>;
 
   addPermission: (sessionId: string, perm: PermissionRequest) => void;
   removePermission: (sessionId: string, requestId: string) => void;
-  addAiResolvedPermission: (sessionId: string, entry: { request: PermissionRequest; behavior: "allow" | "deny"; reason: string; timestamp: number }) => void;
-  clearAiResolvedPermissions: (sessionId: string) => void;
 }
 
 export const createPermissionsSlice: StateCreator<AppState, [], [], PermissionsSlice> = (set) => ({
   pendingPermissions: new Map(),
-  aiResolvedPermissions: new Map(),
 
   addPermission: (sessionId, perm) =>
     set((s) => {
@@ -40,22 +31,5 @@ export const createPermissionsSlice: StateCreator<AppState, [], [], PermissionsS
         pendingPermissions.set(sessionId, updated);
       }
       return { pendingPermissions };
-    }),
-
-  addAiResolvedPermission: (sessionId, entry) =>
-    set((s) => {
-      const aiResolvedPermissions = new Map(s.aiResolvedPermissions);
-      const sessionEntries = [...(aiResolvedPermissions.get(sessionId) || []), entry];
-      // Keep only the last 50 entries per session to avoid unbounded growth
-      if (sessionEntries.length > 50) sessionEntries.splice(0, sessionEntries.length - 50);
-      aiResolvedPermissions.set(sessionId, sessionEntries);
-      return { aiResolvedPermissions };
-    }),
-
-  clearAiResolvedPermissions: (sessionId) =>
-    set((s) => {
-      const aiResolvedPermissions = new Map(s.aiResolvedPermissions);
-      aiResolvedPermissions.delete(sessionId);
-      return { aiResolvedPermissions };
     }),
 });

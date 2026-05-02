@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "../api.js";
 import { useStore } from "../store.js";
-import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
 
 interface SettingsPageProps {
@@ -14,19 +13,13 @@ const CATEGORIES = [
   { id: "authentication", label: "Authentication" },
   { id: "notifications", label: "Notifications" },
   { id: "providers", label: "Providers" },
-  { id: "anthropic", label: "Anthropic" },
-  { id: "ai-validation", label: "AI Validation" },
   { id: "updates", label: "Updates" },
-  { id: "telemetry", label: "Telemetry" },
   { id: "environments", label: "Environments" },
 ] as const;
 
 type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
-  const [anthropicApiKey, setAnthropicApiKey] = useState("");
-  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-6");
-  const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -49,15 +42,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [updatingApp, setUpdatingApp] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateError, setUpdateError] = useState("");
-  const [telemetryEnabled, setTelemetryEnabled] = useState(getTelemetryPreferenceEnabled());
-  const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
-  const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
-  const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(false);
   const [publicUrl, setPublicUrl] = useState("");
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
-  const [apiKeyFocused, setApiKeyFocused] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
   // Provider tokens state
   const [claudeCodeToken, setClaudeCodeToken] = useState("");
@@ -129,13 +115,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     api
       .getSettings()
       .then((s) => {
-        setConfigured(s.anthropicApiKeyConfigured);
         setClaudeCodeTokenConfigured(s.claudeCodeOAuthTokenConfigured);
         setOpenaiApiKeyConfigured(s.openaiApiKeyConfigured);
-        setAnthropicModel(s.anthropicModel || "claude-sonnet-4-6");
-        if (typeof s.aiValidationEnabled === "boolean") setAiValidationEnabled(s.aiValidationEnabled);
-        if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
-        if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
         if (s.updateChannel === "stable" || s.updateChannel === "prerelease") setUpdateChannel(s.updateChannel);
         if (typeof s.dockerAutoUpdate === "boolean") setDockerAutoUpdate(s.dockerAutoUpdate);
         if (typeof s.publicUrl === "string") {
@@ -149,52 +130,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     // Fetch auth token in parallel (non-blocking)
     api.getAuthToken().then((res) => setAuthToken(res.token)).catch(() => {});
   }, []);
-
-  async function onSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    setSaved(false);
-    try {
-      const nextKey = anthropicApiKey.trim();
-      const payload: { anthropicApiKey?: string; anthropicModel: string } = {
-        anthropicModel: anthropicModel.trim() || "claude-sonnet-4-6",
-      };
-      if (nextKey) {
-        payload.anthropicApiKey = nextKey;
-      }
-
-      const res = await api.updateSettings(payload);
-      setConfigured(res.anthropicApiKeyConfigured);
-      setAnthropicApiKey("");
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleAiValidation(field: "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny") {
-    const current = field === "aiValidationEnabled" ? aiValidationEnabled
-      : field === "aiValidationAutoApprove" ? aiValidationAutoApprove
-      : aiValidationAutoDeny;
-    const newValue = !current;
-    // Optimistic UI update
-    if (field === "aiValidationEnabled") setAiValidationEnabled(newValue);
-    else if (field === "aiValidationAutoApprove") setAiValidationAutoApprove(newValue);
-    else setAiValidationAutoDeny(newValue);
-
-    try {
-      await api.updateSettings({ [field]: newValue });
-    } catch {
-      // Revert on failure
-      if (field === "aiValidationEnabled") setAiValidationEnabled(current);
-      else if (field === "aiValidationAutoApprove") setAiValidationAutoApprove(current);
-      else setAiValidationAutoDeny(current);
-    }
-  }
 
   async function onCheckUpdates() {
     setCheckingUpdates(true);
@@ -392,6 +327,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 >
                   {saving ? "Saving..." : saved ? "Saved!" : "Save Public URL"}
                 </button>
+                {error && (
+                  <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
+                    {error}
+                  </div>
+                )}
               </div>
             </section>
 
@@ -679,177 +619,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               </div>
             </section>
 
-            {/* Anthropic */}
-            <section id="anthropic" ref={setSectionRef("anthropic")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">Anthropic</h2>
-              <form onSubmit={onSave} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5" htmlFor="anthropic-key">
-                    Anthropic API Key
-                  </label>
-                  <input
-                    id="anthropic-key"
-                    type="password"
-                    value={configured && !apiKeyFocused && !anthropicApiKey ? "••••••••••••••••" : anthropicApiKey}
-                    onChange={(e) => { setAnthropicApiKey(e.target.value); setVerifyResult(null); }}
-                    onFocus={() => setApiKeyFocused(true)}
-                    onBlur={() => setApiKeyFocused(false)}
-                    placeholder={configured ? "Enter a new key to replace" : "sk-ant-api03-..."}
-                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
-                  />
-                  <p className="mt-1.5 text-xs text-cc-muted">
-                    Auto-renaming is disabled until this key is configured.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1.5" htmlFor="anthropic-model">
-                    Anthropic Model
-                  </label>
-                  <input
-                    id="anthropic-model"
-                    type="text"
-                    value={anthropicModel}
-                    onChange={(e) => setAnthropicModel(e.target.value)}
-                    placeholder="claude-sonnet-4-6"
-                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
-                  />
-                </div>
-
-                {error && (
-                  <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
-                    {error}
-                  </div>
-                )}
-
-                {saved && (
-                  <div className="px-3 py-2 rounded-lg bg-cc-success/10 border border-cc-success/20 text-xs text-cc-success">
-                    Settings saved.
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-cc-muted">
-                    {loading ? "Loading..." : configured ? "Anthropic key configured" : "Anthropic key not configured"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={verifying || !anthropicApiKey.trim()}
-                      onClick={async () => {
-                        setVerifying(true);
-                        setVerifyResult(null);
-                        try {
-                          const result = await api.verifyAnthropicKey(anthropicApiKey.trim());
-                          setVerifyResult(result);
-                          setTimeout(() => setVerifyResult(null), 5000);
-                        } catch (err: unknown) {
-                          setVerifyResult({ valid: false, error: err instanceof Error ? err.message : String(err) });
-                          setTimeout(() => setVerifyResult(null), 5000);
-                        } finally {
-                          setVerifying(false);
-                        }
-                      }}
-                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                        verifying || !anthropicApiKey.trim()
-                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                          : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
-                      }`}
-                    >
-                      {verifying ? "Verifying..." : "Verify"}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={saving || loading}
-                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                        saving || loading
-                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                          : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-                      }`}
-                    >
-                      {saving ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </div>
-
-                {verifyResult && (
-                  <div className={`px-3 py-2 rounded-lg text-xs ${
-                    verifyResult.valid
-                      ? "bg-cc-success/10 border border-cc-success/20 text-cc-success"
-                      : "bg-cc-error/10 border border-cc-error/20 text-cc-error"
-                  }`}>
-                    {verifyResult.valid ? "API key is valid." : `Invalid API key${verifyResult.error ? `: ${verifyResult.error}` : "."}`}
-                  </div>
-                )}
-              </form>
-            </section>
-
-            {/* AI Validation */}
-            <section id="ai-validation" ref={setSectionRef("ai-validation")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">AI Validation</h2>
-              <div className="space-y-3">
-                <p className="text-xs text-cc-muted leading-relaxed">
-                  When enabled, an AI model evaluates tool calls before they execute.
-                  Safe operations are auto-approved, dangerous ones are blocked,
-                  and uncertain cases are shown to you with a recommendation.
-                  Requires an Anthropic API key. These settings serve as defaults
-                  for new sessions. Each session can override AI validation
-                  independently via the shield icon in the session header.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => toggleAiValidation("aiValidationEnabled")}
-                  disabled={!configured}
-                  className={`w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg transition-colors ${
-                    !configured
-                      ? "bg-cc-hover text-cc-muted cursor-not-allowed opacity-60"
-                      : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
-                  }`}
-                >
-                  <span className="text-sm">AI Validation Mode</span>
-                  <span className={`text-xs font-medium ${aiValidationEnabled && configured ? "text-cc-success" : "text-cc-muted"}`}>
-                    {aiValidationEnabled && configured ? "On" : "Off"}
-                  </span>
-                </button>
-                {!configured && (
-                  <p className="text-[11px] text-cc-warning">Configure an Anthropic API key above to enable AI validation.</p>
-                )}
-
-                {aiValidationEnabled && configured && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => toggleAiValidation("aiValidationAutoApprove")}
-                      className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer"
-                    >
-                      <div>
-                        <span className="text-sm">Auto-approve safe tools</span>
-                        <p className="text-[11px] text-cc-muted mt-0.5">Automatically allow read-only tools and benign commands</p>
-                      </div>
-                      <span className={`text-xs font-medium ${aiValidationAutoApprove ? "text-cc-success" : "text-cc-muted"}`}>
-                        {aiValidationAutoApprove ? "On" : "Off"}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleAiValidation("aiValidationAutoDeny")}
-                      className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer"
-                    >
-                      <div>
-                        <span className="text-sm">Auto-deny dangerous tools</span>
-                        <p className="text-[11px] text-cc-muted mt-0.5">Automatically block destructive commands like rm -rf</p>
-                      </div>
-                      <span className={`text-xs font-medium ${aiValidationAutoDeny ? "text-cc-success" : "text-cc-muted"}`}>
-                        {aiValidationAutoDeny ? "On" : "Off"}
-                      </span>
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
-
             {/* Updates */}
             <section id="updates" ref={setSectionRef("updates")}>
               <h2 className="text-sm font-semibold text-cc-fg mb-4">Updates</h2>
@@ -1006,31 +775,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     </p>
                   )}
                 </div>
-              </div>
-            </section>
-
-            {/* Telemetry */}
-            <section id="telemetry" ref={setSectionRef("telemetry")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">Telemetry</h2>
-              <div className="space-y-3">
-                <p className="text-xs text-cc-muted">
-                  Anonymous product analytics and crash reports via PostHog to improve reliability.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !telemetryEnabled;
-                    setTelemetryPreferenceEnabled(next);
-                    setTelemetryEnabled(next);
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-                >
-                  <span>Usage analytics and errors</span>
-                  <span className="text-xs text-cc-muted">{telemetryEnabled ? "On" : "Off"}</span>
-                </button>
-                <p className="text-xs text-cc-muted">
-                  Browser Do Not Track is respected automatically.
-                </p>
               </div>
             </section>
 

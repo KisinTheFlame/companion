@@ -233,11 +233,6 @@ export class ClaudeAdapter implements IBackendAdapter {
       case "set_permission_mode":
         return this.handleOutgoingSetPermissionMode(msg.mode);
 
-      case "set_ai_validation":
-        // AI validation state is managed at the bridge/session level, not
-        // forwarded to the CLI. Return true to indicate acceptance.
-        return true;
-
       case "mcp_get_status":
         return this.handleOutgoingMcpGetStatus();
 

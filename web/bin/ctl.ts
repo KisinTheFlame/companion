@@ -368,9 +368,11 @@ async function handleSettings(base: string, args: string[]): Promise<void> {
     case "set": {
       const flags = parseFlags(args.slice(1));
       const body: Record<string, unknown> = {};
-      if (flags["anthropic-key"]) body.anthropicApiKey = flags["anthropic-key"];
-      if (flags["anthropic-model"]) body.anthropicModel = flags["anthropic-model"];
-      if (Object.keys(body).length === 0) err("Usage: companion settings set --anthropic-key <key> or --anthropic-model <model>");
+      if (flags["claude-token"]) body.claudeCodeOAuthToken = flags["claude-token"];
+      if (flags["openai-key"]) body.openaiApiKey = flags["openai-key"];
+      if (flags["public-url"]) body.publicUrl = flags["public-url"];
+      if (flags["update-channel"]) body.updateChannel = flags["update-channel"];
+      if (Object.keys(body).length === 0) err("Usage: companion settings set --claude-token <token> | --openai-key <key> | --public-url <url> | --update-channel <stable|prerelease>");
       out(await apiPut(base, "/settings", body));
       break;
     }

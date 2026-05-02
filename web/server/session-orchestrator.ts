@@ -9,12 +9,10 @@ import { imagePullManager } from "./image-pull-manager.js";
 import * as envManager from "./env-manager.js";
 import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
-import * as sessionNames from "./session-names.js";
 import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { discoverCommandsAndSkills } from "./commands-discovery.js";
 import { getSettings } from "./settings-manager.js";
-import { generateSessionTitle } from "./auto-namer.js";
 import { companionBus } from "./event-bus.js";
 import { metricsCollector } from "./metrics-collector.js";
 import { log } from "./logger.js";
@@ -201,11 +199,6 @@ export class SessionOrchestrator {
       // returns. Idle-kill is intentional cleanup, not a crash — the session
       // should be fully relaunchable.
       this.clearAutoRelaunchCount(sessionId);
-    });
-
-    // Auto-generate session title after first turn completes
-    companionBus.on("session:first-turn-completed", async ({ sessionId, firstUserMessage }) => {
-      await this.handleAutoNaming(sessionId, firstUserMessage);
     });
 
     // Reconnection watchdog for stale sessions after server restart
@@ -829,22 +822,6 @@ export class SessionOrchestrator {
     if (timer) {
       clearTimeout(timer);
       this.keepaliveTimers.delete(sessionId);
-    }
-  }
-
-  // ── Private: Auto-naming ───────────────────────────────────────────────────
-
-  private async handleAutoNaming(sessionId: string, firstUserMessage: string): Promise<void> {
-    if (sessionNames.getName(sessionId)) return;
-    if (!getSettings().anthropicApiKey.trim()) return;
-    const info = this.launcher.getSession(sessionId);
-    const model = info?.model || "claude-sonnet-4-6";
-    console.log(`[orchestrator] Auto-naming session ${sessionId} via Anthropic with model ${model}...`);
-    const title = await generateSessionTitle(firstUserMessage, model);
-    if (title && !sessionNames.getName(sessionId)) {
-      console.log(`[orchestrator] Auto-named session ${sessionId}: "${title}"`);
-      sessionNames.setName(sessionId, title);
-      this.wsBridge.broadcastNameUpdate(sessionId, title);
     }
   }
 

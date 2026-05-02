@@ -74,10 +74,6 @@ vi.mock("./api.js", () => ({
   },
 }));
 
-vi.mock("./analytics.js", () => ({
-  capturePageView: vi.fn(),
-}));
-
 vi.mock("./utils/routing.js", () => ({
   parseHash: vi.fn().mockReturnValue({ page: "home" }),
   navigateToSession: vi.fn(),

@@ -8,7 +8,6 @@ import type {
 } from "./session-types.js";
 import type { IBackendAdapter } from "./backend-adapter.js";
 import type { SessionStateMachine } from "./session-state-machine.js";
-import { getSettings } from "./settings-manager.js";
 
 export interface CLISocketData {
   kind: "cli";
@@ -99,8 +98,5 @@ export function makeDefaultState(
     git_behind: 0,
     total_lines_added: 0,
     total_lines_removed: 0,
-    aiValidationEnabled: getSettings().aiValidationEnabled,
-    aiValidationAutoApprove: getSettings().aiValidationAutoApprove,
-    aiValidationAutoDeny: getSettings().aiValidationAutoDeny,
   };
 }

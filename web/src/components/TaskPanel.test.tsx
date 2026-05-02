@@ -20,10 +20,6 @@ vi.mock("./ClaudeConfigBrowser.js", () => ({
   ClaudeConfigBrowser: () => <div data-testid="claude-config-browser">Config</div>,
 }));
 
-vi.mock("../analytics.js", () => ({
-  captureException: vi.fn(),
-}));
-
 interface CodexTokenDetails {
   inputTokens: number;
   outputTokens: number;

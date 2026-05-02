@@ -5,7 +5,6 @@ import {
   getSettings,
   updateSettings,
   _resetForTest,
-  DEFAULT_ANTHROPIC_MODEL,
 } from "./settings-manager.js";
 
 let tempDir: string;
@@ -25,14 +24,9 @@ afterEach(() => {
 describe("settings-manager", () => {
   it("returns defaults when file is missing", () => {
     expect(getSettings()).toEqual({
-      anthropicApiKey: "",
-      anthropicModel: DEFAULT_ANTHROPIC_MODEL,
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -41,22 +35,20 @@ describe("settings-manager", () => {
   });
 
   it("updates and persists settings", () => {
-    const updated = updateSettings({ anthropicApiKey: "sk-ant-key" });
-    expect(updated.anthropicApiKey).toBe("sk-ant-key");
-    expect(updated.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
+    const updated = updateSettings({ claudeCodeOAuthToken: "oauth-tok" });
+    expect(updated.claudeCodeOAuthToken).toBe("oauth-tok");
     expect(updated.updatedAt).toBeGreaterThan(0);
 
     const saved = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    expect(saved.anthropicApiKey).toBe("sk-ant-key");
-    expect(saved.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
+    expect(saved.claudeCodeOAuthToken).toBe("oauth-tok");
   });
 
   it("loads existing settings from disk", () => {
     writeFileSync(
       settingsPath,
       JSON.stringify({
-        anthropicApiKey: "existing",
-        anthropicModel: "claude-haiku-3",
+        claudeCodeOAuthToken: "existing",
+        openaiApiKey: "sk-x",
         updatedAt: 123,
       }),
       "utf-8",
@@ -65,14 +57,9 @@ describe("settings-manager", () => {
     _resetForTest(settingsPath);
 
     expect(getSettings()).toEqual({
-      anthropicApiKey: "existing",
-      anthropicModel: "claude-haiku-3",
-      claudeCodeOAuthToken: "",
-      openaiApiKey: "",
+      claudeCodeOAuthToken: "existing",
+      openaiApiKey: "sk-x",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -84,60 +71,10 @@ describe("settings-manager", () => {
     writeFileSync(settingsPath, "not-json", "utf-8");
     _resetForTest(settingsPath);
 
-    expect(getSettings().anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
-  });
-
-  // Migration: existing users with the old dot-form model ID should be auto-corrected
-  it("migrates persisted claude-sonnet-4.6 (dot) to claude-sonnet-4-6 (hyphen)", () => {
-    writeFileSync(
-      settingsPath,
-      JSON.stringify({
-        anthropicApiKey: "sk-ant-existing",
-        anthropicModel: "claude-sonnet-4.6",
-      }),
-      "utf-8",
-    );
-    _resetForTest(settingsPath);
-
-    const settings = getSettings();
-    expect(settings.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
-    expect(settings.anthropicApiKey).toBe("sk-ant-existing");
-  });
-
-  it("updates only model while preserving existing key", () => {
-    updateSettings({ anthropicApiKey: "sk-ant-key" });
-    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
-
-    expect(updated.anthropicApiKey).toBe("sk-ant-key");
-    expect(updated.anthropicModel).toBe("claude-haiku-3");
-  });
-
-  it("uses default model when empty model is provided", () => {
-    const updated = updateSettings({ anthropicModel: "" });
-    expect(updated.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
-  });
-
-  it("normalizes malformed file shape to defaults", () => {
-    writeFileSync(
-      settingsPath,
-      JSON.stringify({
-        anthropicApiKey: 123,
-        anthropicModel: null,
-        updatedAt: "x",
-      }),
-      "utf-8",
-    );
-    _resetForTest(settingsPath);
-
     expect(getSettings()).toEqual({
-      anthropicApiKey: "",
-      anthropicModel: DEFAULT_ANTHROPIC_MODEL,
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: false,
       publicUrl: "",
       updateChannel: "stable",
       dockerAutoUpdate: false,
@@ -145,15 +82,38 @@ describe("settings-manager", () => {
     });
   });
 
-  it("ignores undefined patch values and preserves existing keys", () => {
-    updateSettings({ anthropicApiKey: "sk-ant-key" });
+  it("normalizes malformed file shape to defaults", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        claudeCodeOAuthToken: 123,
+        openaiApiKey: null,
+        updatedAt: "x",
+      }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+
+    expect(getSettings()).toEqual({
+      claudeCodeOAuthToken: "",
+      openaiApiKey: "",
+      onboardingCompleted: false,
+      publicUrl: "",
+      updateChannel: "stable",
+      dockerAutoUpdate: false,
+      updatedAt: 0,
+    });
+  });
+
+  it("ignores undefined patch values and preserves existing values", () => {
+    updateSettings({ claudeCodeOAuthToken: "tok-1" });
     const updated = updateSettings({
-      anthropicApiKey: undefined,
-      anthropicModel: "claude-haiku-3",
+      claudeCodeOAuthToken: undefined,
+      openaiApiKey: "sk-y",
     });
 
-    expect(updated.anthropicApiKey).toBe("sk-ant-key");
-    expect(updated.anthropicModel).toBe("claude-haiku-3");
+    expect(updated.claudeCodeOAuthToken).toBe("tok-1");
+    expect(updated.openaiApiKey).toBe("sk-y");
   });
 
   it("updates updateChannel to prerelease", () => {
@@ -173,18 +133,16 @@ describe("settings-manager", () => {
 
   it("preserves updateChannel when updating other settings", () => {
     updateSettings({ updateChannel: "prerelease" });
-    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
+    const updated = updateSettings({ openaiApiKey: "sk-z" });
     expect(updated.updateChannel).toBe("prerelease");
   });
 
   // ─── publicUrl tests ────────────────────────────────────────────────────────
 
-  // Default settings include publicUrl as empty string
   it("default settings include publicUrl as empty string", () => {
     expect(getSettings().publicUrl).toBe("");
   });
 
-  // updateSettings saves publicUrl when a valid URL is provided
   it("saves publicUrl via updateSettings", () => {
     const updated = updateSettings({ publicUrl: "https://example.com" });
     expect(updated.publicUrl).toBe("https://example.com");
@@ -193,20 +151,15 @@ describe("settings-manager", () => {
     expect(saved.publicUrl).toBe("https://example.com");
   });
 
-  // updateSettings strips trailing slashes from publicUrl
   it("strips trailing slashes from publicUrl", () => {
     const updated = updateSettings({ publicUrl: "https://example.com///" });
     expect(updated.publicUrl).toBe("https://example.com");
   });
 
-  // Missing publicUrl in raw JSON on disk normalizes to empty string
   it("normalizes missing publicUrl in raw JSON to empty string", () => {
     writeFileSync(
       settingsPath,
-      JSON.stringify({
-        anthropicApiKey: "key",
-        anthropicModel: "claude-sonnet-4-6",
-      }),
+      JSON.stringify({ claudeCodeOAuthToken: "tok" }),
       "utf-8",
     );
     _resetForTest(settingsPath);
@@ -214,10 +167,9 @@ describe("settings-manager", () => {
     expect(getSettings().publicUrl).toBe("");
   });
 
-  // Updating other settings preserves an existing publicUrl value
   it("preserves publicUrl when updating other settings", () => {
     updateSettings({ publicUrl: "https://example.com" });
-    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
+    const updated = updateSettings({ openaiApiKey: "sk-x" });
     expect(updated.publicUrl).toBe("https://example.com");
   });
 });

@@ -21,17 +21,8 @@ vi.mock("./git-utils.js", () => ({
   removeWorktree: vi.fn(() => ({ removed: true })),
 }));
 
-vi.mock("./session-names.js", () => ({
-  getName: vi.fn(() => undefined),
-  setName: vi.fn(),
-  getAllNames: vi.fn(() => ({})),
-  removeName: vi.fn(),
-}));
-
 vi.mock("./settings-manager.js", () => ({
   getSettings: vi.fn(() => ({
-    anthropicApiKey: "",
-    anthropicModel: "claude-sonnet-4-6",
     claudeCodeOAuthToken: "",
     openaiApiKey: "",
     onboardingCompleted: false,
@@ -48,10 +39,6 @@ vi.mock("./codex-container-auth.js", () => ({
 
 vi.mock("./commands-discovery.js", () => ({
   discoverCommandsAndSkills: vi.fn(async () => ({ slash_commands: [], skills: [] })),
-}));
-
-vi.mock("./auto-namer.js", () => ({
-  generateSessionTitle: vi.fn(async () => "Test Title"),
 }));
 
 const mockImagePullIsReady = vi.hoisted(() => vi.fn(() => true));
@@ -105,11 +92,9 @@ import { containerManager } from "./container-manager.js";
 import * as envManager from "./env-manager.js";
 import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
-import * as sessionNames from "./session-names.js";
 import * as settingsManager from "./settings-manager.js";
 import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
-import { generateSessionTitle } from "./auto-namer.js";
 import { companionBus } from "./event-bus.js";
 
 // ── Mock factories ──────────────────────────────────────────────────────────
@@ -227,7 +212,6 @@ describe("SessionOrchestrator", () => {
       expect(companionBus.listenerCount("session:git-info-ready")).toBeGreaterThan(0);
       expect(companionBus.listenerCount("session:relaunch-needed")).toBeGreaterThan(0);
       expect(companionBus.listenerCount("session:idle-kill")).toBeGreaterThan(0);
-      expect(companionBus.listenerCount("session:first-turn-completed")).toBeGreaterThan(0);
     });
 
     it("CLI session ID callback delegates to launcher.setCLISessionId", () => {
@@ -351,7 +335,6 @@ describe("SessionOrchestrator", () => {
         exited: companionBus.listenerCount("session:exited"),
         relaunch: companionBus.listenerCount("session:relaunch-needed"),
         idleKill: companionBus.listenerCount("session:idle-kill"),
-        firstTurn: companionBus.listenerCount("session:first-turn-completed"),
       };
 
       orchestrator.initialize();
@@ -362,7 +345,6 @@ describe("SessionOrchestrator", () => {
       expect(companionBus.listenerCount("session:exited")).toBe(countsAfterFirst.exited);
       expect(companionBus.listenerCount("session:relaunch-needed")).toBe(countsAfterFirst.relaunch);
       expect(companionBus.listenerCount("session:idle-kill")).toBe(countsAfterFirst.idleKill);
-      expect(companionBus.listenerCount("session:first-turn-completed")).toBe(countsAfterFirst.firstTurn);
     });
   });
 
@@ -1098,48 +1080,6 @@ describe("SessionOrchestrator", () => {
       expect(result.ok).toBe(true);
       expect(deps.launcher.setArchived).toHaveBeenCalledWith("s1", false);
       expect(deps.sessionStore.setArchived).toHaveBeenCalledWith("s1", false);
-    });
-  });
-
-  // ── Auto-naming ───────────────────────────────────────────────────────────
-
-  describe("handleAutoNaming (via initialize)", () => {
-    it("generates title when anthropicApiKey is set and no name exists", async () => {
-      vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "sk-ant-123",
-      } as any);
-      vi.mocked(sessionNames.getName).mockReturnValue(undefined);
-      deps.launcher.getSession.mockReturnValue({ model: "claude-sonnet-4-6" });
-      vi.mocked(generateSessionTitle).mockResolvedValue("Test Title");
-
-      orchestrator.initialize();
-      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello world" });
-      await new Promise(r => setTimeout(r, 0));
-
-      expect(generateSessionTitle).toHaveBeenCalledWith("Hello world", "claude-sonnet-4-6");
-      expect(sessionNames.setName).toHaveBeenCalledWith("s1", "Test Title");
-      expect(deps.wsBridge.broadcastNameUpdate).toHaveBeenCalledWith("s1", "Test Title");
-    });
-
-    it("skips naming when session already has a name", async () => {
-      vi.mocked(settingsManager.getSettings).mockReturnValue({ anthropicApiKey: "sk-ant-123" } as any);
-      vi.mocked(sessionNames.getName).mockReturnValue("Existing Name");
-
-      orchestrator.initialize();
-      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello" });
-      await new Promise(r => setTimeout(r, 0));
-
-      expect(generateSessionTitle).not.toHaveBeenCalled();
-    });
-
-    it("skips naming when no API key is configured", async () => {
-      vi.mocked(settingsManager.getSettings).mockReturnValue({ anthropicApiKey: "" } as any);
-
-      orchestrator.initialize();
-      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello" });
-      await new Promise(r => setTimeout(r, 0));
-
-      expect(generateSessionTitle).not.toHaveBeenCalled();
     });
   });
 

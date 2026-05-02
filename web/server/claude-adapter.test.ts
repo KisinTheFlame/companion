@@ -25,9 +25,6 @@ vi.mock("node:crypto", () => ({
 // Mock settings-manager to prevent real file system reads
 vi.mock("./settings-manager.js", () => ({
   getSettings: () => ({
-    aiValidationEnabled: false,
-    aiValidationAutoApprove: false,
-    aiValidationAutoDeny: false,
     anthropicApiKey: "",
   }),
   DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4-6",
@@ -637,18 +634,6 @@ describe("send() — outgoing message translation", () => {
     expect(sent.type).toBe("control_request");
     expect(sent.request.subtype).toBe("set_permission_mode");
     expect(sent.request.mode).toBe("plan");
-  });
-
-  it("set_ai_validation → returns true without sending anything", () => {
-    // AI validation state is managed at the bridge level, not forwarded
-    // to the CLI. send() should return true (accepted) but not send any data.
-    const result = adapter.send({
-      type: "set_ai_validation",
-      aiValidationEnabled: true,
-    });
-    expect(result).toBe(true);
-    // No message should have been sent to the socket
-    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it("session_subscribe → returns false (handled at bridge level)", () => {

@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalSt
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { api } from "./api.js";
-import { capturePageView } from "./analytics.js";
 import { parseHash, navigateToSession } from "./utils/routing.js";
 import { LoginPage } from "./components/LoginPage.js";
 import { Sidebar } from "./components/Sidebar.js";
@@ -58,10 +57,6 @@ export default function App() {
   const isEnvironmentsPage = route.page === "environments";
   const isSandboxesPage = route.page === "sandboxes";
   const isSessionView = route.page === "session" || route.page === "home";
-
-  useEffect(() => {
-    capturePageView(hash || "#/");
-  }, [hash]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);

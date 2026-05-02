@@ -25,10 +25,6 @@ vi.mock("../api.js", () => ({
   },
 }));
 
-vi.mock("../analytics.js", () => ({
-  captureException: vi.fn(),
-}));
-
 // Stub child components to isolate ChatView logic
 vi.mock("./MessageFeed.js", () => ({
   MessageFeed: ({ sessionId }: { sessionId: string }) => (
@@ -46,10 +42,6 @@ vi.mock("./PermissionBanner.js", () => ({
   PermissionBanner: () => <div data-testid="permission-banner" />,
 }));
 
-vi.mock("./AiValidationBadge.js", () => ({
-  AiValidationBadge: () => <div data-testid="ai-validation-badge" />,
-}));
-
 vi.mock("./ActivityTray.js", () => ({
   ActivityTray: ({ sessionId }: { sessionId: string }) => (
     <div data-testid="activity-tray">{sessionId}</div>
@@ -63,14 +55,12 @@ function setupStore(overrides: {
   cliConnected?: boolean;
   cliReconnecting?: boolean;
   hasPendingPerms?: boolean;
-  hasAiResolved?: boolean;
 } = {}) {
   const {
     connectionStatus = "connected",
     cliConnected = true,
     cliReconnecting = false,
     hasPendingPerms = false,
-    hasAiResolved = false,
   } = overrides;
 
   const connMap = new Map<string, string>();
@@ -89,18 +79,11 @@ function setupStore(overrides: {
     pendingPerms.set("s1", permsForSession);
   }
 
-  const aiResolved = new Map();
-  if (hasAiResolved) {
-    aiResolved.set("s1", [{ tool: "Read", decision: "approved" }]);
-  }
-
   mockStoreState = {
     connectionStatus: connMap,
     cliConnected: cliMap,
     cliReconnecting: reconnMap,
     pendingPermissions: pendingPerms,
-    aiResolvedPermissions: aiResolved,
-    clearAiResolvedPermissions: vi.fn(),
     setCliReconnecting: mockSetCliReconnecting,
   };
 }
@@ -231,10 +214,4 @@ describe("ChatView", () => {
     expect(screen.getByTestId("permission-banner")).toBeTruthy();
   });
 
-  // AI validation badge renders when present
-  it("renders AI validation badge when ai-resolved permissions exist", () => {
-    setupStore({ hasAiResolved: true });
-    render(<ChatView sessionId="s1" />);
-    expect(screen.getByTestId("ai-validation-badge")).toBeTruthy();
-  });
 });
