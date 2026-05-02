@@ -1361,56 +1361,123 @@ describe("SessionOrchestrator", () => {
     it("preserves retry budget when relaunch returns ok:false without error", async () => {
       // A silent failure (ok:false, no error string) should NOT reset the auto-relaunch
       // count. This prevents unlimited retries when the launcher silently fails.
+      // After each failure we auto-reschedule another attempt via the proactive
+      // keepalive (exponential backoff with jitter), so a single trigger is enough
+      // to drive the budget to the cap. Math.random is pinned so the test timeline
+      // is deterministic.
+      const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
       deps.launcher.getSession.mockReturnValue({ archived: false, state: "exited", pid: undefined } as any);
       deps.wsBridge.isCliConnected.mockReturnValue(false);
       deps.launcher.relaunch.mockResolvedValue({ ok: false }); // no error string
       orchestrator.initialize();
 
-      // Trigger 3 silent-failure relaunches (the max)
-      for (let i = 0; i < 3; i++) {
-        companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
-        await vi.advanceTimersByTimeAsync(15_000);
-        await vi.advanceTimersByTimeAsync(0);
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
+
+      // Long enough to drain MAX_AUTO_RELAUNCHES (6) attempts with exponential
+      // backoff capped at 60s — well under 10 minutes.
+      for (let step = 0; step < 80; step++) {
+        await vi.advanceTimersByTimeAsync(10_000);
       }
 
-      // 4th attempt should hit the MAX_AUTO_RELAUNCHES limit
-      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
-      await vi.advanceTimersByTimeAsync(15_000);
-      await vi.advanceTimersByTimeAsync(0);
-
-      // Only 3 relaunch calls, 4th was rejected at the limit
-      expect(deps.launcher.relaunch).toHaveBeenCalledTimes(3);
+      // Cap is enforced: even though we keep auto-rescheduling on failure,
+      // the orchestrator stops at MAX_AUTO_RELAUNCHES (6).
+      expect(deps.launcher.relaunch).toHaveBeenCalledTimes(6);
+      randSpy.mockRestore();
     });
 
     it("stops after MAX_AUTO_RELAUNCHES attempts", async () => {
-      // After reaching the max auto-relaunch count, give up and notify the user.
-      // Mock relaunch to return an error so the count doesn't get cleared
-      // (successful relaunch clears the count, simulating recovery).
+      // After reaching the max auto-relaunch count, give up, notify the user,
+      // and broadcast an exhausted relaunch_status so the sidebar can drop the
+      // spinning "retrying N/M" hint.
+      const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
       deps.launcher.getSession.mockReturnValue({ archived: false, state: "exited", pid: undefined } as any);
       deps.wsBridge.isCliConnected.mockReturnValue(false);
       deps.launcher.relaunch.mockResolvedValue({ ok: false, error: "crashed again" });
       orchestrator.initialize();
 
-      // Trigger 3 relaunches (the max). Each needs the relaunchingSet cooldown
-      // to clear before the next attempt can proceed.
-      for (let i = 0; i < 3; i++) {
-        companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
-        await vi.advanceTimersByTimeAsync(15_000);
-        await vi.advanceTimersByTimeAsync(0);
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
+
+      for (let step = 0; step < 80; step++) {
+        await vi.advanceTimersByTimeAsync(10_000);
       }
 
-      // 4th attempt should be rejected since count reached MAX_AUTO_RELAUNCHES
-      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
-      await vi.advanceTimersByTimeAsync(15_000);
-      await vi.advanceTimersByTimeAsync(0);
-
-      // relaunch should have been called 3 times, not 4
-      expect(deps.launcher.relaunch).toHaveBeenCalledTimes(3);
-      // Should broadcast error message to session
+      expect(deps.launcher.relaunch).toHaveBeenCalledTimes(6);
+      // User-facing error must be broadcast at exhaustion
       expect(deps.wsBridge.broadcastToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
         type: "error",
         message: expect.stringContaining("keeps crashing"),
       }));
+      // The exhausted relaunch_status payload must also fire so the UI can
+      // switch from spinner to a terminal warning.
+      expect(deps.wsBridge.broadcastToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+        type: "relaunch_status",
+        exhausted: true,
+      }));
+      randSpy.mockRestore();
+    });
+
+    it("releases the state machine and reschedules when relaunch returns ok:false", async () => {
+      // Regression for the "yellow spinner forever" bug: when launcher.relaunch
+      // returns ok:false, the orchestrator must (a) reset the state machine off
+      // "starting"/"initializing" so the sidebar can react, and (b) schedule
+      // another attempt automatically. Without (a) the sidebar stays stuck;
+      // without (b) the user has to refresh manually.
+      const transition = vi.fn();
+      const stateMachine = {
+        get phase() { return this._phase; },
+        _phase: "starting" as string,
+        transition: (to: string, trigger: string) => {
+          stateMachine._phase = to;
+          transition(to, trigger);
+        },
+      };
+      const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+      deps.launcher.getSession.mockReturnValue({ archived: false, state: "exited", pid: undefined } as any);
+      deps.wsBridge.isCliConnected.mockReturnValue(false);
+      deps.wsBridge.getSession.mockReturnValue({ stateMachine } as any);
+      deps.launcher.relaunch.mockResolvedValue({ ok: false, error: "container missing" });
+      orchestrator.initialize();
+
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
+      // First attempt: 10s grace, then relaunch fails.
+      await vi.advanceTimersByTimeAsync(11_000);
+
+      // forceTerminate must have moved the state machine off "starting".
+      expect(transition).toHaveBeenCalledWith("starting", "relaunch_initiated");
+      expect(transition).toHaveBeenCalledWith("terminated", "relaunch_failed");
+      // A retry must be scheduled (proactive keepalive) — confirm by letting
+      // enough time elapse for the second attempt with jitter=0.
+      for (let step = 0; step < 80; step++) {
+        await vi.advanceTimersByTimeAsync(10_000);
+      }
+      // At MAX_AUTO_RELAUNCHES (6), retries stop on their own.
+      expect(deps.launcher.relaunch).toHaveBeenCalledTimes(6);
+      randSpy.mockRestore();
+    });
+
+    it("broadcasts attempt + nextRetryAt when scheduling a retry", async () => {
+      // The sidebar shows "Ns 后重试" countdowns by reading nextRetryAt from
+      // relaunch_status. Verify a retry-scheduled payload reaches the bridge.
+      const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
+      deps.launcher.getSession.mockReturnValue({ archived: false, state: "exited", pid: undefined } as any);
+      deps.wsBridge.isCliConnected.mockReturnValue(false);
+      deps.launcher.relaunch.mockResolvedValue({ ok: false, error: "boom" });
+      orchestrator.initialize();
+
+      companionBus.emit("session:exited", { sessionId: "s1", exitCode: 1 });
+      // Allow first keepalive + first failed relaunch to complete.
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      const calls = deps.wsBridge.broadcastToSession.mock.calls.filter(
+        ([, msg]: [string, any]) => msg?.type === "relaunch_status" && msg.nextRetryAt !== null,
+      );
+      expect(calls.length).toBeGreaterThan(0);
+      const sample = calls[0][1];
+      expect(sample.attempt).toBeGreaterThanOrEqual(1);
+      expect(sample.maxAttempts).toBeGreaterThanOrEqual(1);
+      expect(sample.exhausted).toBe(false);
+      expect(typeof sample.nextRetryAt).toBe("number");
+      randSpy.mockRestore();
     });
   });
 
@@ -1494,6 +1561,9 @@ describe("SessionOrchestrator", () => {
 
     it("uses exponential backoff on repeated crashes (3s → 6s → 12s)", async () => {
       // Each crash should increase the delay before the keepalive timer fires.
+      // Pin Math.random to 0 so the jitter component contributes no extra time
+      // and the deterministic 3s / 6s / 12s timeline still holds.
+      const randSpy = vi.spyOn(Math, "random").mockReturnValue(0);
       let relaunchCount = 0;
       deps.launcher.getSession.mockReturnValue({
         archived: false,
@@ -1546,6 +1616,7 @@ describe("SessionOrchestrator", () => {
       await vi.advanceTimersByTimeAsync(15_000);
       await vi.advanceTimersByTimeAsync(0);
       expect(relaunchCount).toBe(3);
+      randSpy.mockRestore();
     });
 
     it("cancels keepalive timer on session delete", async () => {

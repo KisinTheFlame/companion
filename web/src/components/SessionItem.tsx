@@ -60,6 +60,37 @@ function StatusDot({ status }: { status: DerivedStatus }) {
   }
 }
 
+function useRetryHint(
+  attempt: number | undefined,
+  maxAttempts: number | undefined,
+  nextRetryAt: number | null,
+  exhausted: boolean,
+  archived: boolean,
+): string | null {
+  // Tick once per second only while a future retry is pending. Avoids a
+  // wakeup loop for sessions that aren't retrying.
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (archived) return;
+    if (nextRetryAt === null) return;
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [nextRetryAt, archived]);
+
+  if (archived) return null;
+  if (exhausted && attempt && maxAttempts) {
+    return `重试已用尽（${attempt}/${maxAttempts}）`;
+  }
+  if (!attempt || !maxAttempts) return null;
+  if (nextRetryAt !== null) {
+    const seconds = Math.max(0, Math.round((nextRetryAt - Date.now()) / 1000));
+    return seconds > 0
+      ? `${seconds}s 后重试 (${attempt}/${maxAttempts})`
+      : `即将重试 (${attempt}/${maxAttempts})`;
+  }
+  return `重试中 ${attempt}/${maxAttempts}`;
+}
+
 function BackendBadge({ type }: { type: "claude" | "codex" }) {
   if (type === "codex") {
     return (
@@ -106,6 +137,18 @@ export function SessionItem({
 
   // Show the full cwd path below the session name
   const cwdTail = s.cwd || "";
+
+  // Build a one-line retry hint when an auto-relaunch is in progress or
+  // exhausted. We tick once per second so a "retrying in Ns" countdown stays
+  // fresh; the timer is only armed when we actually have a future retry to
+  // count down to.
+  const retryHint = useRetryHint(
+    s.relaunchAttempt,
+    s.relaunchMaxAttempts,
+    s.relaunchNextRetryAt ?? null,
+    s.relaunchExhausted ?? false,
+    !!archived,
+  );
 
   // Close menu on click outside or Escape; arrow-key navigation between menu items
   useEffect(() => {
@@ -235,10 +278,22 @@ export function SessionItem({
             >
               {label}
             </span>
-            {cwdTail && (
-              <span className="text-[10px] text-cc-muted/70 truncate block leading-tight mt-px">
-                {cwdTail}
+            {retryHint ? (
+              <span
+                className={`text-[10px] truncate block leading-tight mt-px ${
+                  s.relaunchExhausted ? "text-cc-warning" : "text-cc-muted/70"
+                }`}
+                aria-live="polite"
+                data-testid="session-retry-hint"
+              >
+                {retryHint}
               </span>
+            ) : (
+              cwdTail && (
+                <span className="text-[10px] text-cc-muted/70 truncate block leading-tight mt-px">
+                  {cwdTail}
+                </span>
+              )
             )}
           </div>
         )}

@@ -19,13 +19,25 @@ import { log } from "./logger.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_AUTO_RELAUNCHES = 3;
+const MAX_AUTO_RELAUNCHES = 6;
 const RELAUNCH_GRACE_MS = 10_000;
 const RELAUNCH_COOLDOWN_MS = 5_000;
 const RECONNECT_GRACE_MS = Number(process.env.COMPANION_RECONNECT_GRACE_MS || "30000");
 
-// Proactive keepalive: base delay before relaunching a crashed CLI (doubles per attempt)
+// Proactive keepalive: exponential backoff with jitter.
+// delay(n) = min(BASE * 2^n, MAX) + rand(0, JITTER)
 const KEEPALIVE_BASE_DELAY_MS = 3_000;
+const KEEPALIVE_MAX_DELAY_MS = 60_000;
+const KEEPALIVE_JITTER_MS = 5_000;
+
+function computeRelaunchDelayMs(attempt: number): number {
+  const exp = Math.min(
+    KEEPALIVE_BASE_DELAY_MS * Math.pow(2, attempt),
+    KEEPALIVE_MAX_DELAY_MS,
+  );
+  const jitter = Math.random() * KEEPALIVE_JITTER_MS;
+  return Math.round(exp + jitter);
+}
 
 const VSCODE_EDITOR_CONTAINER_PORT = 13337;
 const CODEX_APP_SERVER_CONTAINER_PORT = Number(
@@ -719,6 +731,7 @@ export class SessionOrchestrator {
     }
 
     const count = this.autoRelaunchCounts.get(sessionId) ?? 0;
+    const session = this.wsBridge.getSession(sessionId);
     if (count >= MAX_AUTO_RELAUNCHES) {
       metricsCollector.recordRelaunchExhausted();
       log.warn("orchestrator", "Auto-relaunch limit reached", { sessionId, maxAttempts: MAX_AUTO_RELAUNCHES });
@@ -726,6 +739,16 @@ export class SessionOrchestrator {
         type: "error",
         message: "Session keeps crashing. Please relaunch manually.",
       });
+      this.broadcastRelaunchStatus(sessionId, {
+        attempt: count,
+        maxAttempts: MAX_AUTO_RELAUNCHES,
+        nextRetryAt: null,
+        exhausted: true,
+      });
+      // Force the state machine to "terminated" so the spinner stops on the UI.
+      // Without this, a stuck "starting" / "initializing" phase from a prior
+      // failed relaunch would keep the yellow indicator spinning forever.
+      this.forceTerminate(session, "relaunch_exhausted");
       this.relaunchExhaustedNotified.add(sessionId);
       this.relaunchingSet.delete(sessionId);
       return;
@@ -735,15 +758,24 @@ export class SessionOrchestrator {
       this.autoRelaunchCounts.set(sessionId, count + 1);
       metricsCollector.recordRelaunchAttempted();
       log.info("orchestrator", "Auto-relaunching CLI", { sessionId, attempt: count + 1, maxAttempts: MAX_AUTO_RELAUNCHES });
-      const session = this.wsBridge.getSession(sessionId);
+      this.broadcastRelaunchStatus(sessionId, {
+        attempt: count + 1,
+        maxAttempts: MAX_AUTO_RELAUNCHES,
+        nextRetryAt: null,
+        exhausted: false,
+      });
       if (session?.stateMachine) {
         session.stateMachine.transition("starting", "relaunch_initiated");
       }
+      let relaunchFailed = false;
       try {
         const result = await this.launcher.relaunch(sessionId);
-        if (!result.ok && result.error) {
-          this.wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
-        } else if (result.ok) {
+        if (!result.ok) {
+          relaunchFailed = true;
+          if (result.error) {
+            this.wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
+          }
+        } else {
           metricsCollector.recordRelaunchSucceeded();
           this.autoRelaunchCounts.delete(sessionId);
           this.relaunchExhaustedNotified.delete(sessionId);
@@ -751,9 +783,30 @@ export class SessionOrchestrator {
           // After a successful relaunch, the session is alive again — any prior
           // idle-kill intent no longer applies.
           this.intentionalKills.delete(sessionId);
+          this.broadcastRelaunchStatus(sessionId, {
+            attempt: 0,
+            maxAttempts: MAX_AUTO_RELAUNCHES,
+            nextRetryAt: null,
+            exhausted: false,
+          });
         }
-        // ok=false without error: keep count to preserve the retry budget
-      } finally {
+      } catch (err) {
+        relaunchFailed = true;
+        log.error("orchestrator", "Relaunch threw", {
+          sessionId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      if (relaunchFailed) {
+        // Reset the state machine away from "starting"/"initializing" so the
+        // UI can recover, then schedule another retry through the proactive
+        // keepalive (which applies exponential backoff + jitter via
+        // computeRelaunchDelayMs based on the bumped count).
+        this.forceTerminate(session, "relaunch_failed");
+        this.relaunchingSet.delete(sessionId);
+        this.scheduleProactiveRelaunch(sessionId);
+      } else {
         setTimeout(() => this.relaunchingSet.delete(sessionId), RELAUNCH_COOLDOWN_MS);
       }
     } else {
@@ -761,12 +814,41 @@ export class SessionOrchestrator {
     }
   }
 
+  /**
+   * Force-terminate a session's state machine if it's still in a transient
+   * phase (starting/initializing/reconnecting). Idempotent — safe to call when
+   * already terminated.
+   */
+  private forceTerminate(
+    session: ReturnType<WsBridge["getSession"]>,
+    trigger: string,
+  ): void {
+    if (!session?.stateMachine) return;
+    const phase = session.stateMachine.phase;
+    if (phase === "starting" || phase === "initializing" || phase === "reconnecting") {
+      session.stateMachine.transition("terminated", trigger);
+    }
+  }
+
+  private broadcastRelaunchStatus(
+    sessionId: string,
+    status: { attempt: number; maxAttempts: number; nextRetryAt: number | null; exhausted: boolean },
+  ): void {
+    this.wsBridge.broadcastToSession(sessionId, {
+      type: "relaunch_status",
+      attempt: status.attempt,
+      maxAttempts: status.maxAttempts,
+      nextRetryAt: status.nextRetryAt,
+      exhausted: status.exhausted,
+    });
+  }
+
   // ── Private: Proactive keepalive ────────────────────────────────────────────
 
   /**
    * Schedules a proactive relaunch of a crashed CLI process, regardless of
-   * whether any browsers are connected. Uses exponential backoff (3s, 6s, 12s)
-   * based on the auto-relaunch attempt count.
+   * whether any browsers are connected. Uses exponential backoff with jitter
+   * (computeRelaunchDelayMs) based on the auto-relaunch attempt count.
    *
    * Skips relaunch for:
    * - Intentional kills (idle-kill, manual delete/archive)
@@ -787,15 +869,23 @@ export class SessionOrchestrator {
     // Skip if a relaunch is already in progress (e.g. triggered by browser reconnect)
     if (this.relaunchingSet.has(sessionId)) return;
 
-    // Exponential backoff: 3s → 6s → 12s based on attempt count
     const attempt = this.autoRelaunchCounts.get(sessionId) ?? 0;
-    const delay = KEEPALIVE_BASE_DELAY_MS * Math.pow(2, attempt);
+    const delay = computeRelaunchDelayMs(attempt);
 
     log.info("orchestrator", "Scheduling proactive keepalive relaunch", {
       sessionId,
       attempt: attempt + 1,
       maxAttempts: MAX_AUTO_RELAUNCHES,
       delayMs: delay,
+    });
+
+    // Tell browsers when the next retry will fire so the sidebar can show
+    // "retrying in Ns" alongside the spinning indicator.
+    this.broadcastRelaunchStatus(sessionId, {
+      attempt: attempt + 1,
+      maxAttempts: MAX_AUTO_RELAUNCHES,
+      nextRetryAt: Date.now() + delay,
+      exhausted: false,
     });
 
     // Cancel any existing keepalive timer for this session

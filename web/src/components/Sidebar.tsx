@@ -95,6 +95,7 @@ export function Sidebar() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const cliConnected = useStore((s) => s.cliConnected);
   const cliReconnecting = useStore((s) => s.cliReconnecting);
+  const relaunchStatus = useStore((s) => s.relaunchStatus);
   const sessionStatus = useStore((s) => s.sessionStatus);
   const removeSession = useStore((s) => s.removeSession);
   const sessionNames = useStore((s) => s.sessionNames);
@@ -376,6 +377,10 @@ export function Sidebar() {
       backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
       repoRoot: bridgeState?.repo_root || "",
       permCount: pendingPermissions.get(id)?.size ?? 0,
+      relaunchAttempt: relaunchStatus.get(id)?.attempt,
+      relaunchMaxAttempts: relaunchStatus.get(id)?.maxAttempts,
+      relaunchNextRetryAt: relaunchStatus.get(id)?.nextRetryAt,
+      relaunchExhausted: relaunchStatus.get(id)?.exhausted,
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
