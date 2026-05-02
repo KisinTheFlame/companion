@@ -13,27 +13,17 @@ import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { TerminalManager } from "./terminal-manager.js";
 import * as sessionNames from "./session-names.js";
-import * as sessionLinearIssues from "./session-linear-issues.js";
 import { containerManager } from "./container-manager.js";
 import { registerFsRoutes } from "./routes/fs-routes.js";
 import { registerSkillRoutes } from "./routes/skills-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
 import { registerSandboxRoutes } from "./routes/sandbox-routes.js";
-import { registerCronRoutes } from "./routes/cron-routes.js";
-import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerMetricsRoutes } from "./routes/metrics-routes.js";
-import { registerLinearAgentWebhookRoute, registerLinearAgentProtectedRoutes } from "./routes/linear-agent-routes.js";
-import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
-import { registerTailscaleRoutes } from "./routes/tailscale-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { isRecordingHubEnabled } from "./recording-hub/hub-config.js";
 import { registerHubRoutes } from "./recording-hub/hub-routes.js";
-import { registerLinearRoutes, fetchLinearTeamStates } from "./routes/linear-routes.js";
-import { registerLinearConnectionRoutes } from "./routes/linear-connection-routes.js";
-import { getConnection, resolveApiKey } from "./linear-connections.js";
-import { registerLinearOAuthConnectionRoutes } from "./routes/linear-oauth-connection-routes.js";
 import { getSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
@@ -57,9 +47,6 @@ export function createRoutes(
   terminalManager: TerminalManager,
   prPoller?: import("./pr-poller.js").PRPoller,
   recorder?: import("./recorder.js").RecorderManager,
-  cronScheduler?: import("./cron-scheduler.js").CronScheduler,
-  agentExecutor?: import("./agent-executor.js").AgentExecutor,
-  linearAgentBridge?: import("./linear-agent-bridge.js").LinearAgentBridge,
   port?: number,
 ) {
   const api = new Hono();
@@ -136,12 +123,6 @@ export function createRoutes(
     return c.json({ ok: false });
   });
 
-  // ─── Linear Agent SDK webhook route (exempt from auth middleware) ────────
-  // Uses HMAC-SHA256 signature verification, not Companion auth tokens.
-  if (linearAgentBridge) {
-    registerLinearAgentWebhookRoute(api, linearAgentBridge);
-  }
-
   // ─── Auth middleware (protects all routes below) ───────────────────
 
   api.use("/*", async (c, next) => {
@@ -165,9 +146,6 @@ export function createRoutes(
     }
     return next();
   });
-
-  // ─── Linear Agent SDK protected routes (status, authorize URL, disconnect) ─────
-  registerLinearAgentProtectedRoutes(api);
 
   // ─── Auth management (protected) ──────────────────────────────────
 
@@ -1064,65 +1042,7 @@ export function createRoutes(
   });
 
   api.get("/sessions/:id/archive-info", async (c) => {
-    const id = c.req.param("id");
-    const linkedIssue = sessionLinearIssues.getLinearIssue(id);
-
-    if (!linkedIssue) {
-      return c.json({ hasLinkedIssue: false, issueNotDone: false });
-    }
-
-    const stateType = (linkedIssue.stateType || "").toLowerCase();
-    const isDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
-
-    if (isDone) {
-      return c.json({
-        hasLinkedIssue: true,
-        issueNotDone: false,
-        issue: {
-          id: linkedIssue.id,
-          identifier: linkedIssue.identifier,
-          stateName: linkedIssue.stateName,
-          stateType: linkedIssue.stateType,
-          teamId: linkedIssue.teamId,
-        },
-      });
-    }
-
-    // Issue is not done — check if backlog state is available and if archive transition is configured
-    const resolved = resolveApiKey(linkedIssue.connectionId);
-    let hasBacklogState = false;
-    if (resolved && linkedIssue.teamId) {
-      const teams = await fetchLinearTeamStates(resolved.apiKey);
-      const team = teams.find((t) => t.id === linkedIssue.teamId);
-      if (team) {
-        hasBacklogState = team.states.some((s) => s.type === "backlog");
-      }
-    }
-
-    // Use connection-level archive settings if available, fall back to global settings
-    const settings = getSettings();
-    const conn = resolved && resolved.connectionId !== "legacy" ? getConnection(resolved.connectionId) : null;
-    const archiveTransitionConfigured = conn
-      ? conn.archiveTransition && !!conn.archiveTransitionStateId.trim()
-      : settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim();
-    const archiveTransitionStateName = conn
-      ? conn.archiveTransitionStateName || undefined
-      : settings.linearArchiveTransitionStateName || undefined;
-
-    return c.json({
-      hasLinkedIssue: true,
-      issueNotDone: true,
-      issue: {
-        id: linkedIssue.id,
-        identifier: linkedIssue.identifier,
-        stateName: linkedIssue.stateName,
-        stateType: linkedIssue.stateType,
-        teamId: linkedIssue.teamId,
-      },
-      hasBacklogState,
-      archiveTransitionConfigured,
-      archiveTransitionStateName,
-    });
+    return c.json({ hasLinkedIssue: false, issueNotDone: false });
   });
 
   api.post("/sessions/:id/archive", async (c) => {
@@ -1130,9 +1050,8 @@ export function createRoutes(
     const body = await c.req.json().catch(() => ({}));
     const result = await orchestrator.archiveSession(id, {
       force: body.force,
-      linearTransition: body.linearTransition,
     });
-    return c.json({ ok: true, worktree: result.worktree, linearTransition: result.linearTransition });
+    return c.json({ ok: true, worktree: result.worktree });
   });
 
   api.post("/sessions/:id/unarchive", (c) => {
@@ -1239,18 +1158,7 @@ export function createRoutes(
   registerEnvRoutes(api, { webDir: WEB_DIR });
   registerSandboxRoutes(api);
 
-  registerPromptRoutes(api);
   registerSettingsRoutes(api);
-
-  // ─── Tailscale ──────────────────────────────────────────────────────
-
-  if (port !== undefined) registerTailscaleRoutes(api, port);
-
-  // ─── Linear ────────────────────────────────────────────────────────
-
-  registerLinearRoutes(api);
-  registerLinearConnectionRoutes(api);
-  registerLinearOAuthConnectionRoutes(api);
 
   registerGitRoutes(api, prPoller);
   registerSystemRoutes(api, {
@@ -1261,8 +1169,6 @@ export function createRoutes(
   });
 
   registerSkillRoutes(api);
-  registerCronRoutes(api, cronScheduler);
-  registerAgentRoutes(api, agentExecutor);
   registerMetricsRoutes(api, { gaugeProvider: wsBridge });
 
   // ─── Recording Hub (hidden feature: COMPANION_RECORDING_HUB=1) ──────

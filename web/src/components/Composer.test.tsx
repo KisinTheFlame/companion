@@ -8,8 +8,6 @@ import type { SessionState } from "../../server/session-types.js";
 Element.prototype.scrollIntoView = vi.fn();
 
 const mockSendToSession = vi.fn();
-const mockListPrompts = vi.fn();
-const mockCreatePrompt = vi.fn();
 
 // Build a controllable mock store state
 let mockStoreState: Record<string, unknown> = {};
@@ -28,8 +26,6 @@ vi.mock("../ws.js", () => ({
 vi.mock("../api.js", () => ({
   api: {
     gitPull: vi.fn().mockResolvedValue({ success: true, output: "", git_ahead: 0, git_behind: 0 }),
-    listPrompts: (...args: unknown[]) => mockListPrompts(...args),
-    createPrompt: (...args: unknown[]) => mockCreatePrompt(...args),
   },
 }));
 
@@ -120,15 +116,6 @@ function setupMockStore(overrides: {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockListPrompts.mockResolvedValue([]);
-  mockCreatePrompt.mockResolvedValue({
-    id: "p-new",
-    name: "New Prompt",
-    content: "Text",
-    scope: "project",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
   setupMockStore();
 });
 
@@ -455,90 +442,6 @@ describe("Composer disabled state", () => {
   });
 });
 
-describe("Composer @ prompts menu", () => {
-  it("opens @ menu and inserts selected prompt with Enter", async () => {
-    // Validates keyboard insertion from @ suggestions without sending the message.
-    mockListPrompts.mockResolvedValue([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR and list risks.",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    ]);
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-
-    fireEvent.change(textarea, { target: { value: "@rev", selectionStart: 4 } });
-    await screen.findByText("@review-pr");
-    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
-
-    expect((textarea as HTMLTextAreaElement).value).toContain("Review this PR and list risks.");
-    expect(mockSendToSession).not.toHaveBeenCalled();
-  });
-
-  it("filters prompts by typed query", async () => {
-    // Validates fuzzy filtering by prompt name while typing after @.
-    mockListPrompts.mockResolvedValue([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-      {
-        id: "p2",
-        name: "write-tests",
-        content: "Write tests",
-        scope: "project",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    ]);
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-
-    fireEvent.change(textarea, { target: { value: "@wri", selectionStart: 4 } });
-    await screen.findByText("@write-tests");
-
-    expect(screen.getByText("@write-tests")).toBeTruthy();
-    expect(screen.queryByText("@review-pr")).toBeNull();
-  });
-
-  it("does not refetch prompts on each @ query keystroke", async () => {
-    // Validates prompt fetch remains stable while filtering happens client-side.
-    mockListPrompts.mockResolvedValue([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    ]);
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-
-    await waitFor(() => {
-      expect(mockListPrompts).toHaveBeenCalledTimes(1);
-    });
-
-    fireEvent.change(textarea, { target: { value: "@r", selectionStart: 2 } });
-    await screen.findByText("@review-pr");
-    fireEvent.change(textarea, { target: { value: "@re", selectionStart: 3 } });
-    await screen.findByText("@review-pr");
-    fireEvent.change(textarea, { target: { value: "@rev", selectionStart: 4 } });
-    await screen.findByText("@review-pr");
-
-    expect(mockListPrompts).toHaveBeenCalledTimes(1);
-  });
-});
-
 // ─── Keyboard navigation ────────────────────────────────────────────────────
 
 describe("Composer keyboard navigation", () => {
@@ -641,141 +544,6 @@ describe("Composer layout", () => {
   });
 });
 
-describe("Composer save prompt", () => {
-  it("shows save error when create prompt fails", async () => {
-    // Validates API failures are visible to the user instead of being silently ignored.
-    mockCreatePrompt.mockRejectedValue(new Error("Could not save prompt right now"));
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-
-    fireEvent.change(textarea, { target: { value: "Prompt body text" } });
-    // Mobile + desktop layouts render separate buttons; click the first visible one.
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    const titleInput = screen.getByPlaceholderText("Prompt title");
-    fireEvent.change(titleInput, { target: { value: "My Prompt" } });
-    fireEvent.click(screen.getByText("Save"));
-
-    expect(await screen.findByText("Could not save prompt right now")).toBeTruthy();
-  });
-
-  it("renders scope buttons in save prompt modal", async () => {
-    // Validates the Global / This project scope selector is visible in the save prompt modal.
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "Some text" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-
-    expect(screen.getByText("Global")).toBeTruthy();
-    expect(screen.getByText("This project")).toBeTruthy();
-  });
-
-  it("saves project-scoped prompt with session cwd", async () => {
-    // Validates that selecting "This project" sends projectPaths with the session cwd.
-    mockCreatePrompt.mockResolvedValue({ id: "p1", name: "test", content: "body", scope: "project", projectPaths: ["/test"] });
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "Prompt body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    fireEvent.change(screen.getByPlaceholderText("Prompt title"), { target: { value: "My Prompt" } });
-
-    // Switch to project scope
-    fireEvent.click(screen.getByText("This project"));
-    fireEvent.click(screen.getByText("Save"));
-
-    await waitFor(() => {
-      expect(mockCreatePrompt).toHaveBeenCalledWith({
-        name: "My Prompt",
-        content: "Prompt body",
-        scope: "project",
-        projectPaths: ["/test"],
-      });
-    });
-  });
-
-  it("shows error when saving project-scoped prompt without cwd", async () => {
-    // Validates that an informative error is shown when cwd is not available.
-    setupMockStore({ isConnected: true, session: { cwd: "" } });
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "Prompt body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    fireEvent.change(screen.getByPlaceholderText("Prompt title"), { target: { value: "My Prompt" } });
-
-    fireEvent.click(screen.getByText("This project"));
-    fireEvent.click(screen.getByText("Save"));
-
-    expect(await screen.findByText("No project folder available for this session")).toBeTruthy();
-    expect(mockCreatePrompt).not.toHaveBeenCalled();
-  });
-
-  it("shows cwd path when project scope selected", () => {
-    // Validates the cwd is displayed below the scope selector in project mode.
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "Prompt body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    fireEvent.click(screen.getByText("This project"));
-
-    expect(screen.getByText("/test")).toBeTruthy();
-  });
-
-  it("cancel button closes save prompt modal and resets scope", () => {
-    // Validates the cancel button resets state.
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "Prompt body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    fireEvent.click(screen.getByText("This project"));
-    fireEvent.click(screen.getByText("Cancel"));
-
-    // Modal should be closed
-    expect(screen.queryByText("Save prompt")).toBeFalsy();
-  });
-
-  it("clears error when typing in prompt title", () => {
-    // Validates that typing in the title input clears a previous error.
-    setupMockStore({ isConnected: true, session: { cwd: "" } });
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-    fireEvent.change(screen.getByPlaceholderText("Prompt title"), { target: { value: "title" } });
-    fireEvent.click(screen.getByText("This project"));
-    fireEvent.click(screen.getByText("Save"));
-
-    // Error should appear
-    expect(screen.getByText("No project folder available for this session")).toBeTruthy();
-
-    // Typing should clear the error
-    fireEvent.change(screen.getByPlaceholderText("Prompt title"), { target: { value: "title2" } });
-    expect(screen.queryByText("No project folder available for this session")).toBeFalsy();
-  });
-
-  it("can toggle scope back to global after selecting project", () => {
-    // Validates clicking Global button after selecting "This project" resets scope.
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "body" } });
-    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
-
-    // Select project, then switch back to global
-    fireEvent.click(screen.getByText("This project"));
-    expect(screen.getByText("/test")).toBeTruthy();
-    fireEvent.click(screen.getByText("Global"));
-
-    // cwd should no longer be shown
-    expect(screen.queryByText("/test")).toBeFalsy();
-  });
-
-  it("passes axe accessibility checks", async () => {
-    const { axe } = await import("vitest-axe");
-    setupMockStore({ isConnected: true });
-    const { container } = render(<Composer sessionId="s1" />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});
-
 // ─── Toolbar interactions ────────────────────────────────────────────────────
 
 describe("Composer toolbar interactions", () => {
@@ -798,21 +566,6 @@ describe("Composer toolbar interactions", () => {
     const attachBtn = screen.getByTitle("Attach image");
     fireEvent.click(attachBtn);
     expect(clickSpy).toHaveBeenCalled();
-  });
-
-  it("desktop save prompt button opens save modal with default name", () => {
-    // Validates clicking the desktop bookmark icon opens save modal and pre-fills name.
-    const { container } = render(<Composer sessionId="s1" />);
-    const textarea = container.querySelector("textarea")!;
-    fireEvent.change(textarea, { target: { value: "My prompt text" } });
-
-    // The second "Save as prompt" button is the desktop one
-    const saveButtons = screen.getAllByTitle("Save as prompt");
-    fireEvent.click(saveButtons[saveButtons.length - 1]);
-
-    expect(screen.getByText("Save prompt")).toBeTruthy();
-    const titleInput = screen.getByPlaceholderText("Prompt title") as HTMLInputElement;
-    expect(titleInput.value).toBe("My prompt text");
   });
 
   it("mode toggle button triggers plan mode on desktop", () => {

@@ -27,18 +27,6 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
-      linearApiKey: "",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-    linearArchiveTransition: false,
-    linearArchiveTransitionStateId: "",
-    linearArchiveTransitionStateName: "",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
@@ -56,13 +44,11 @@ describe("settings-manager", () => {
     const updated = updateSettings({ anthropicApiKey: "sk-ant-key" });
     expect(updated.anthropicApiKey).toBe("sk-ant-key");
     expect(updated.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
-    expect(updated.linearApiKey).toBe("");
     expect(updated.updatedAt).toBeGreaterThan(0);
 
     const saved = JSON.parse(readFileSync(settingsPath, "utf-8"));
     expect(saved.anthropicApiKey).toBe("sk-ant-key");
     expect(saved.anthropicModel).toBe(DEFAULT_ANTHROPIC_MODEL);
-    expect(saved.linearApiKey).toBe("");
   });
 
   it("loads existing settings from disk", () => {
@@ -71,7 +57,6 @@ describe("settings-manager", () => {
       JSON.stringify({
         anthropicApiKey: "existing",
         anthropicModel: "claude-haiku-3",
-        linearApiKey: "lin_api_abc",
         updatedAt: 123,
       }),
       "utf-8",
@@ -82,18 +67,6 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "existing",
       anthropicModel: "claude-haiku-3",
-      linearApiKey: "lin_api_abc",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-    linearArchiveTransition: false,
-    linearArchiveTransitionStateId: "",
-    linearArchiveTransitionStateName: "",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
@@ -137,7 +110,6 @@ describe("settings-manager", () => {
 
     expect(updated.anthropicApiKey).toBe("sk-ant-key");
     expect(updated.anthropicModel).toBe("claude-haiku-3");
-    expect(updated.linearApiKey).toBe("");
   });
 
   it("uses default model when empty model is provided", () => {
@@ -151,7 +123,6 @@ describe("settings-manager", () => {
       JSON.stringify({
         anthropicApiKey: 123,
         anthropicModel: null,
-        linearApiKey: 123,
         updatedAt: "x",
       }),
       "utf-8",
@@ -161,18 +132,6 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
-      linearApiKey: "",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-    linearArchiveTransition: false,
-    linearArchiveTransitionStateId: "",
-    linearArchiveTransitionStateName: "",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
       claudeCodeOAuthToken: "",
       openaiApiKey: "",
       onboardingCompleted: false,
@@ -186,26 +145,15 @@ describe("settings-manager", () => {
     });
   });
 
-  it("updates linear key without touching anthropic settings", () => {
-    updateSettings({ anthropicApiKey: "sk-ant-key", anthropicModel: "claude-sonnet-4-6" });
-    const updated = updateSettings({ linearApiKey: "lin_api_123" });
-
-    expect(updated.anthropicApiKey).toBe("sk-ant-key");
-    expect(updated.anthropicModel).toBe("claude-sonnet-4-6");
-    expect(updated.linearApiKey).toBe("lin_api_123");
-  });
-
   it("ignores undefined patch values and preserves existing keys", () => {
-    updateSettings({ anthropicApiKey: "sk-ant-key", linearApiKey: "lin_api_123" });
+    updateSettings({ anthropicApiKey: "sk-ant-key" });
     const updated = updateSettings({
       anthropicApiKey: undefined,
       anthropicModel: "claude-haiku-3",
-      linearApiKey: undefined,
     });
 
     expect(updated.anthropicApiKey).toBe("sk-ant-key");
     expect(updated.anthropicModel).toBe("claude-haiku-3");
-    expect(updated.linearApiKey).toBe("lin_api_123");
   });
 
   it("updates updateChannel to prerelease", () => {

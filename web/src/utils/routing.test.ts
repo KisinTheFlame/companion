@@ -24,29 +24,12 @@ describe("parseHash", () => {
     expect(parseHash("#/settings")).toEqual({ page: "settings" });
   });
 
-  it("parses integrations route", () => {
-    expect(parseHash("#/integrations")).toEqual({ page: "integrations" });
-  });
-
-  it("parses linear integration route", () => {
-    expect(parseHash("#/integrations/linear")).toEqual({ page: "integration-linear" });
-  });
-
-  it("parses prompts route", () => {
-    expect(parseHash("#/prompts")).toEqual({ page: "prompts" });
-  });
-
   it("parses environments route", () => {
     expect(parseHash("#/environments")).toEqual({ page: "environments" });
   });
 
-  it("parses docker-builder route as home (removed)", () => {
-    // docker-builder route was removed; unknown routes map to home
-    expect(parseHash("#/docker-builder")).toEqual({ page: "home" });
-  });
-
-  it("parses scheduled route (redirects to agents)", () => {
-    expect(parseHash("#/scheduled")).toEqual({ page: "agents" });
+  it("parses sandboxes route", () => {
+    expect(parseHash("#/sandboxes")).toEqual({ page: "sandboxes" });
   });
 
   it("parses playground route", () => {

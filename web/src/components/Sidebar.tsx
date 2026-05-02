@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
-import { api, type ArchiveInfo } from "../api.js";
-import { ArchiveLinearModal, type LinearTransitionChoice } from "./ArchiveLinearModal.js";
+import { api } from "../api.js";
 import { connectAllSessions, disconnectSession } from "../ws.js";
 import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
@@ -49,21 +48,6 @@ const EXTERNAL_LINKS: ExternalLink[] = [
 
 const NAV_ITEMS: NavItem[] = [
   {
-    id: "prompts",
-    label: "Prompts",
-    hash: "#/prompts",
-    viewBox: "0 0 16 16",
-    iconPath: "M3 2.5A1.5 1.5 0 014.5 1h5.879c.398 0 .779.158 1.06.44l1.621 1.62c.281.282.44.663.44 1.061V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11zM4.5 2a.5.5 0 00-.5.5v11a.5.5 0 00.5.5H12a.5.5 0 00.5-.5V4.121a.5.5 0 00-.146-.353l-1.621-1.621A.5.5 0 0010.379 2H4.5zm1.25 4.25a.75.75 0 01.75-.75h3a.75.75 0 010 1.5h-3a.75.75 0 01-.75-.75zm0 3a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5H6.5a.75.75 0 01-.75-.75z",
-  },
-  {
-    id: "integrations",
-    label: "Integrations",
-    hash: "#/integrations",
-    activePages: ["integrations", "integration-linear", "integration-linear-oauth", "integration-tailscale"],
-    viewBox: "0 0 16 16",
-    iconPath: "M2.5 3A1.5 1.5 0 001 4.5v2A1.5 1.5 0 002.5 8h2A1.5 1.5 0 006 6.5v-2A1.5 1.5 0 004.5 3h-2zm0 1h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2a.5.5 0 01.5-.5zm9 0A1.5 1.5 0 0010 5.5v2A1.5 1.5 0 0011.5 9h2A1.5 1.5 0 0015 7.5v-2A1.5 1.5 0 0013.5 4h-2zm0 1h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2a.5.5 0 01.5-.5zM2.5 10A1.5 1.5 0 001 11.5v2A1.5 1.5 0 002.5 15h2A1.5 1.5 0 006 13.5v-2A1.5 1.5 0 004.5 10h-2zm0 1h2a.5.5 0 01.5.5v2a.5.5 0 01-.5.5h-2a.5.5 0 01-.5-.5v-2a.5.5 0 01.5-.5zM8.5 12a.5.5 0 100 1h5a.5.5 0 100-1h-5zm0-2a.5.5 0 100 1h2a.5.5 0 100-1h-2z",
-  },
-  {
     id: "environments",
     label: "Environments",
     hash: "#/environments",
@@ -80,21 +64,6 @@ const NAV_ITEMS: NavItem[] = [
     activePages: ["sandboxes"],
   },
   {
-    id: "agents",
-    label: "Agents",
-    hash: "#/agents",
-    activePages: ["agents", "agent-detail"],
-    viewBox: "0 0 16 16",
-    iconPath: "M8 1.5a2.5 2.5 0 00-2.5 2.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5S9.38 1.5 8 1.5zM4 8a4 4 0 00-4 4v1.5a.5.5 0 00.5.5h15a.5.5 0 00.5-.5V12a4 4 0 00-4-4H4z",
-  },
-  {
-    id: "runs",
-    label: "Runs",
-    hash: "#/runs",
-    viewBox: "0 0 16 16",
-    iconPath: "M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 3.5a.75.75 0 011.5 0v3.19l2.03 2.03a.75.75 0 01-1.06 1.06l-2.25-2.25A.75.75 0 017.25 8V4.5z",
-  },
-  {
     id: "settings",
     label: "Settings",
     hash: "#/settings",
@@ -106,8 +75,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const NAV_SECTIONS = [
-  { id: "workbench", label: "Workbench", itemIds: ["prompts", "integrations"] },
-  { id: "workspace", label: "Workspace", itemIds: ["environments", "sandboxes", "agents", "settings"] },
+  { id: "workspace", label: "Workspace", itemIds: ["environments", "sandboxes", "settings"] },
 ] as const;
 
 const NAV_ITEMS_BY_ID = new Map(NAV_ITEMS.map((item) => [item.id, item]));
@@ -117,9 +85,6 @@ export function Sidebar() {
   const [editingName, setEditingName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
-  const [archiveModalSessionId, setArchiveModalSessionId] = useState<string | null>(null);
-  const [archiveModalInfo, setArchiveModalInfo] = useState<ArchiveInfo | null>(null);
-  const [archiveModalContainerized, setArchiveModalContainerized] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
@@ -136,7 +101,6 @@ export function Sidebar() {
   const recentlyRenamed = useStore((s) => s.recentlyRenamed);
   const clearRecentlyRenamed = useStore((s) => s.clearRecentlyRenamed);
   const pendingPermissions = useStore((s) => s.pendingPermissions);
-  const linkedLinearIssues = useStore((s) => s.linkedLinearIssues);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
   const route = parseHash(hash);
@@ -331,40 +295,18 @@ export function Sidebar() {
     const bridgeState = sessions.get(sessionId);
     const isContainerized = bridgeState?.is_containerized || !!sdkInfo?.containerId || false;
 
-    // Check if session has a linked non-done Linear issue
-    const linkedIssue = linkedLinearIssues.get(sessionId);
-    const stateType = (linkedIssue?.stateType || "").toLowerCase();
-    const isIssueDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
-
-    if (linkedIssue && !isIssueDone) {
-      // Fetch archive info (backlog availability, configured transition state)
-      try {
-        const info = await api.getArchiveInfo(sessionId);
-        if (info.issueNotDone) {
-          setArchiveModalSessionId(sessionId);
-          setArchiveModalInfo(info);
-          setArchiveModalContainerized(isContainerized);
-          return;
-        }
-      } catch {
-        // Fall through to normal archive flow on error
-      }
-    }
-
-    // No linked non-done issue — use existing container-only confirmation or direct archive
     if (isContainerized) {
       setConfirmArchiveId(sessionId);
       return;
     }
     doArchive(sessionId);
-  }, [sdkSessions, sessions, linkedLinearIssues]);
+  }, [sdkSessions, sessions]);
 
-  const doArchive = useCallback(async (sessionId: string, force?: boolean, linearTransition?: LinearTransitionChoice) => {
+  const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
     try {
       disconnectSession(sessionId);
-      const opts: { force?: boolean; linearTransition?: LinearTransitionChoice } = {};
+      const opts: { force?: boolean } = {};
       if (force) opts.force = true;
-      if (linearTransition && linearTransition !== "none") opts.linearTransition = linearTransition;
       await api.archiveSession(sessionId, Object.keys(opts).length > 0 ? opts : undefined);
     } catch {
       // best-effort
@@ -390,19 +332,6 @@ export function Sidebar() {
 
   const cancelArchive = useCallback(() => {
     setConfirmArchiveId(null);
-  }, []);
-
-  const handleArchiveModalConfirm = useCallback((choice: LinearTransitionChoice, force?: boolean) => {
-    if (archiveModalSessionId) {
-      doArchive(archiveModalSessionId, force, choice);
-      setArchiveModalSessionId(null);
-      setArchiveModalInfo(null);
-    }
-  }, [archiveModalSessionId, doArchive]);
-
-  const handleArchiveModalCancel = useCallback(() => {
-    setArchiveModalSessionId(null);
-    setArchiveModalInfo(null);
   }, []);
 
   const handleUnarchiveSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
@@ -447,21 +376,13 @@ export function Sidebar() {
       backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
       repoRoot: bridgeState?.repo_root || "",
       permCount: pendingPermissions.get(id)?.size ?? 0,
-      cronJobId: bridgeState?.cronJobId || sdkInfo?.cronJobId,
-      cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
-      agentId: bridgeState?.agentId || sdkInfo?.agentId,
-      agentName: bridgeState?.agentName || sdkInfo?.agentName,
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  const activeSessions = allSessionList.filter((s) => !s.archived && !s.cronJobId && !s.agentId);
-  const cronSessions = allSessionList.filter((s) => !s.archived && !!s.cronJobId);
-  const agentSessions = allSessionList.filter((s) => !s.archived && !!s.agentId);
+  const activeSessions = allSessionList.filter((s) => !s.archived);
   const archivedSessions = allSessionList.filter((s) => s.archived);
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
-  const [showCronSessions, setShowCronSessions] = useState(true);
-  const [showAgentSessions, setShowAgentSessions] = useState(true);
 
   // Group active sessions by project
   const projectGroups = useMemo(
@@ -547,7 +468,7 @@ export function Sidebar() {
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto px-2.5 pb-2">
-        {activeSessions.length === 0 && cronSessions.length === 0 && archivedSessions.length === 0 ? (
+        {activeSessions.length === 0 && archivedSessions.length === 0 ? (
           <p className="px-3 py-8 text-xs text-cc-muted text-center leading-relaxed">
             No sessions yet.
           </p>
@@ -567,66 +488,6 @@ export function Sidebar() {
                 {...sessionItemProps}
               />
             ))}
-
-            {cronSessions.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-cc-separator">
-                <button
-                  onClick={() => setShowCronSessions(!showCronSessions)}
-                  aria-expanded={showCronSessions}
-                  className="w-full px-2 py-1 text-[11px] font-semibold text-cc-fg/60 uppercase tracking-wide flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2 h-2 text-cc-muted/50 transition-transform duration-150 ${showCronSessions ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                  Scheduled Runs ({cronSessions.length})
-                </button>
-                {showCronSessions && (
-                  <div className="mt-0.5">
-                    {cronSessions.map((s) => (
-                      <SessionItem
-                        key={s.id}
-                        session={s}
-                        isActive={currentSessionId === s.id}
-                        sessionName={sessionNames.get(s.id)}
-                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
-                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
-                        {...sessionItemProps}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {agentSessions.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-cc-separator">
-                <button
-                  onClick={() => setShowAgentSessions(!showAgentSessions)}
-                  aria-expanded={showAgentSessions}
-                  className="w-full px-2 py-1 text-[11px] font-semibold text-cc-fg/60 uppercase tracking-wide flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2 h-2 text-cc-muted/50 transition-transform duration-150 ${showAgentSessions ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                  Agent Runs ({agentSessions.length})
-                </button>
-                {showAgentSessions && (
-                  <div className="mt-0.5">
-                    {agentSessions.map((s) => (
-                      <SessionItem
-                        key={s.id}
-                        session={s}
-                        isActive={currentSessionId === s.id}
-                        sessionName={sessionNames.get(s.id)}
-                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
-                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
-                        {...sessionItemProps}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
             {archivedSessions.length > 0 && (
               <div className="mt-3 pt-3 border-t border-cc-separator">
@@ -815,19 +676,6 @@ export function Sidebar() {
             </div>
           </div>
         </div>
-      )}
-      {/* Archive Linear transition modal */}
-      {archiveModalSessionId && archiveModalInfo && (
-        <ArchiveLinearModal
-          issueIdentifier={archiveModalInfo.issue?.identifier || ""}
-          issueStateName={archiveModalInfo.issue?.stateName || ""}
-          isContainerized={archiveModalContainerized}
-          archiveTransitionConfigured={archiveModalInfo.archiveTransitionConfigured || false}
-          archiveTransitionStateName={archiveModalInfo.archiveTransitionStateName}
-          hasBacklogState={archiveModalInfo.hasBacklogState || false}
-          onConfirm={handleArchiveModalConfirm}
-          onCancel={handleArchiveModalCancel}
-        />
       )}
     </aside>
   );

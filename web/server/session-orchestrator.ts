@@ -2,7 +2,6 @@ import type { CliLauncher, SdkSessionInfo } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
-import type { AgentExecutor } from "./agent-executor.js";
 import type { BackendType, CreationStepId } from "./session-types.js";
 import type { ContainerConfig, ContainerInfo } from "./container-manager.js";
 import { containerManager } from "./container-manager.js";
@@ -11,10 +10,6 @@ import * as envManager from "./env-manager.js";
 import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
-import * as sessionLinearIssues from "./session-linear-issues.js";
-import { getConnection, resolveApiKey } from "./linear-connections.js";
-import { buildLinearSystemPrompt } from "./linear-prompt-builder.js";
-import { transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { discoverCommandsAndSkills } from "./commands-discovery.js";
@@ -51,7 +46,6 @@ export interface SessionOrchestratorDeps {
     watch(sessionId: string, cwd: string, branch: string): void;
     unwatch(sessionId: string): void;
   };
-  agentExecutor: AgentExecutor;
 }
 
 export interface CreateSessionRequest {
@@ -66,8 +60,6 @@ export interface CreateSessionRequest {
   envSlug?: string;
   sandboxEnabled?: boolean;
   sandboxSlug?: string;
-  linearConnectionId?: string;
-  linearIssue?: unknown;
   branch?: string;
   createBranch?: boolean;
   useWorktree?: boolean;
@@ -89,18 +81,11 @@ export type ProgressCallback = (
 
 export interface ArchiveSessionOptions {
   force?: boolean;
-  linearTransition?: string;
 }
 
 export interface ArchiveSessionResult {
   ok: boolean;
   worktree?: { cleaned?: boolean; dirty?: boolean; path?: string };
-  linearTransition?: {
-    ok: boolean;
-    skipped?: boolean;
-    error?: string;
-    issue?: { id: string; identifier: string; stateName: string; stateType: string };
-  };
 }
 
 export interface DeleteSessionResult {
@@ -121,7 +106,6 @@ export class SessionOrchestrator {
   private sessionStore: SessionStore;
   private worktreeTracker: WorktreeTracker;
   private prPoller: SessionOrchestratorDeps["prPoller"];
-  private agentExecutor: AgentExecutor;
 
   // Auto-relaunch state
   private relaunchingSet = new Set<string>();
@@ -148,7 +132,6 @@ export class SessionOrchestrator {
     this.sessionStore = deps.sessionStore;
     this.worktreeTracker = deps.worktreeTracker;
     this.prPoller = deps.prPoller;
-    this.agentExecutor = deps.agentExecutor;
   }
 
   // ── Initialization (event wiring) ──────────────────────────────────────────
@@ -167,11 +150,7 @@ export class SessionOrchestrator {
       this.wsBridge.attachBackendAdapter(sessionId, adapter, "codex");
     });
 
-    // When a CLI/Codex process exits, notify agent executor and external listeners
-    // separately so a throw in one doesn't skip the other (bus isolates each handler).
-    companionBus.on("session:exited", ({ sessionId, exitCode }) => {
-      this.agentExecutor.handleSessionExited(sessionId, exitCode);
-    });
+    // When a CLI/Codex process exits, notify external listeners
     companionBus.on("session:exited", ({ sessionId, exitCode }) => {
       for (const cb of this.exitCallbacks) {
         try {
@@ -293,16 +272,6 @@ export class SessionOrchestrator {
       const companionSandbox = body.sandboxSlug ? sandboxManager.getSandbox(body.sandboxSlug) : null;
       if (sandboxEnabled && body.sandboxSlug && !companionSandbox) {
         return { ok: false, error: `Sandbox "${body.sandboxSlug}" not found`, status: 404 };
-      }
-
-      // Inject LINEAR_API_KEY if a Linear connection is specified
-      let linearSystemPrompt: string | undefined;
-      if (body.linearConnectionId) {
-        const conn = getConnection(body.linearConnectionId);
-        if (conn?.apiKey) {
-          envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
-          linearSystemPrompt = buildLinearSystemPrompt(conn, body.linearIssue as { identifier: string; title: string; stateName: string; teamName: string; url: string } | undefined);
-        }
       }
 
       // Resolve Docker image early
@@ -576,7 +545,6 @@ export class SessionOrchestrator {
           containerCwd: containerInfo?.containerCwd,
           resumeSessionAt,
           forkSession,
-          systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
           sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
         });
       } catch (e) {
@@ -601,10 +569,6 @@ export class SessionOrchestrator {
           worktreePath: worktreeInfo.worktreePath,
           createdAt: Date.now(),
         });
-      }
-
-      if (linearSystemPrompt && backend === "claude") {
-        this.wsBridge.injectSystemPrompt(session.sessionId, linearSystemPrompt);
       }
 
       const discovered = await discoverCommandsAndSkills(cwd).catch(() => ({ slash_commands: [] as string[], skills: [] as string[] }));
@@ -651,42 +615,6 @@ export class SessionOrchestrator {
   // ── Archive ────────────────────────────────────────────────────────────────
 
   async archiveSession(sessionId: string, options?: ArchiveSessionOptions): Promise<ArchiveSessionResult> {
-    let linearTransitionResult: ArchiveSessionResult["linearTransition"];
-    const linearTransition = options?.linearTransition;
-
-    if (linearTransition && linearTransition !== "none") {
-      const linkedIssue = sessionLinearIssues.getLinearIssue(sessionId);
-      if (linkedIssue) {
-        const resolved = resolveApiKey(linkedIssue.connectionId);
-        if (resolved) {
-          const { apiKey: linearApiKey, connectionId: resolvedConnId } = resolved;
-          const settings = getSettings();
-          const conn = resolvedConnId !== "legacy" ? getConnection(resolvedConnId) : null;
-          let targetStateId = "";
-
-          if (linearTransition === "backlog" && linkedIssue.teamId) {
-            const teams = await fetchLinearTeamStates(linearApiKey);
-            const team = teams.find((t) => t.id === linkedIssue.teamId);
-            const backlogState = team?.states.find((s) => s.type === "backlog");
-            if (backlogState) targetStateId = backlogState.id;
-          } else if (linearTransition === "configured") {
-            const archiveStateId = conn ? conn.archiveTransitionStateId : settings.linearArchiveTransitionStateId;
-            targetStateId = archiveStateId.trim();
-          }
-
-          if (targetStateId) {
-            try {
-              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey, resolvedConnId);
-            } catch {
-              linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
-            }
-          } else {
-            linearTransitionResult = { ok: true, skipped: true };
-          }
-        }
-      }
-    }
-
     this.intentionalKills.add(sessionId);
     this.cancelKeepaliveTimer(sessionId);
     this.wsBridge.cancelDisconnectTimer(sessionId);
@@ -698,7 +626,7 @@ export class SessionOrchestrator {
     this.launcher.setArchived(sessionId, true);
     this.sessionStore.setArchived(sessionId, true);
 
-    return { ok: true, worktree: worktreeResult, linearTransition: linearTransitionResult };
+    return { ok: true, worktree: worktreeResult };
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────
@@ -711,7 +639,6 @@ export class SessionOrchestrator {
     containerManager.removeContainer(sessionId);
     const worktreeResult = this.cleanupWorktree(sessionId, true);
     this.prPoller.unwatch(sessionId);
-    sessionLinearIssues.removeLinearIssue(sessionId);
     this.launcher.removeSession(sessionId);
     this.wsBridge.closeSession(sessionId);
     this.autoRelaunchCounts.delete(sessionId);

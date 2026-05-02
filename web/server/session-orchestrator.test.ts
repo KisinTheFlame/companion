@@ -28,42 +28,14 @@ vi.mock("./session-names.js", () => ({
   removeName: vi.fn(),
 }));
 
-vi.mock("./session-linear-issues.js", () => ({
-  getLinearIssue: vi.fn(() => undefined),
-  setLinearIssue: vi.fn(),
-  removeLinearIssue: vi.fn(),
-  getAllLinearIssues: vi.fn(() => ({})),
-}));
-
 vi.mock("./settings-manager.js", () => ({
   getSettings: vi.fn(() => ({
     anthropicApiKey: "",
     anthropicModel: "claude-sonnet-4-6",
-    linearApiKey: "",
-    linearAutoTransition: false,
-    linearAutoTransitionStateId: "",
-    linearAutoTransitionStateName: "",
-    linearArchiveTransition: false,
-    linearArchiveTransitionStateId: "",
-    linearArchiveTransitionStateName: "",
     claudeCodeOAuthToken: "",
     openaiApiKey: "",
     onboardingCompleted: false,
   })),
-}));
-
-vi.mock("./linear-connections.js", () => ({
-  getConnection: vi.fn(() => null),
-  resolveApiKey: vi.fn(() => null),
-}));
-
-vi.mock("./linear-prompt-builder.js", () => ({
-  buildLinearSystemPrompt: vi.fn(() => ""),
-}));
-
-vi.mock("./routes/linear-routes.js", () => ({
-  transitionLinearIssue: vi.fn(async () => ({ ok: true })),
-  fetchLinearTeamStates: vi.fn(async () => []),
 }));
 
 vi.mock("./claude-container-auth.js", () => ({
@@ -134,10 +106,7 @@ import * as envManager from "./env-manager.js";
 import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
-import * as sessionLinearIssues from "./session-linear-issues.js";
 import * as settingsManager from "./settings-manager.js";
-import { resolveApiKey } from "./linear-connections.js";
-import { transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { generateSessionTitle } from "./auto-namer.js";
@@ -201,14 +170,12 @@ function createDeps(overrides?: Partial<SessionOrchestratorDeps>) {
   const sessionStore = createMockStore();
   const worktreeTracker = createMockTracker();
   const prPoller = { watch: vi.fn(), unwatch: vi.fn() };
-  const agentExecutor = { handleSessionExited: vi.fn() } as any;
   return {
     launcher,
     wsBridge,
     sessionStore,
     worktreeTracker,
     prPoller,
-    agentExecutor,
     ...overrides,
   };
 }
@@ -270,14 +237,6 @@ describe("SessionOrchestrator", () => {
       companionBus.emit("session:cli-id-received", { sessionId: "s1", cliSessionId: "cli-id-123" });
 
       expect(deps.launcher.setCLISessionId).toHaveBeenCalledWith("s1", "cli-id-123");
-    });
-
-    it("session exit callback notifies agentExecutor", () => {
-      orchestrator.initialize();
-
-      companionBus.emit("session:exited", { sessionId: "s1", exitCode: 0 });
-
-      expect(deps.agentExecutor.handleSessionExited).toHaveBeenCalledWith("s1", 0);
     });
 
     it("git info ready callback starts PR polling", () => {
@@ -1049,112 +1008,6 @@ describe("SessionOrchestrator", () => {
       expect(deps.sessionStore.setArchived).toHaveBeenCalledWith("s1", true);
     });
 
-    it("performs Linear transition when linearTransition=backlog", async () => {
-      // Set up linked issue
-      vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue({
-        id: "issue-1",
-        identifier: "ENG-42",
-        teamId: "team-1",
-        connectionId: "conn-1",
-      } as any);
-      vi.mocked(resolveApiKey).mockReturnValue({ apiKey: "lin_api_123", connectionId: "conn-1" });
-      vi.mocked(fetchLinearTeamStates).mockResolvedValue([
-        {
-          id: "team-1",
-          key: "ENG",
-          name: "Engineering",
-          states: [
-            { id: "state-backlog", name: "Backlog", type: "backlog" },
-            { id: "state-done", name: "Done", type: "completed" },
-          ],
-        },
-      ]);
-      vi.mocked(transitionLinearIssue).mockResolvedValue({
-        ok: true,
-        issue: { id: "issue-1", identifier: "ENG-42", stateName: "Backlog", stateType: "backlog" },
-      } as any);
-
-      const result = await orchestrator.archiveSession("s1", { linearTransition: "backlog" });
-
-      expect(result.ok).toBe(true);
-      expect(fetchLinearTeamStates).toHaveBeenCalledWith("lin_api_123");
-      expect(transitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-backlog", "lin_api_123", "conn-1");
-      // Session should still be archived even with transition
-      expect(deps.launcher.setArchived).toHaveBeenCalledWith("s1", true);
-    });
-
-    it("archives even when Linear transition fails", async () => {
-      vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue({
-        id: "issue-1",
-        identifier: "ENG-42",
-        teamId: "team-1",
-        connectionId: "conn-1",
-      } as any);
-      vi.mocked(resolveApiKey).mockReturnValue({ apiKey: "lin_api_123", connectionId: "conn-1" });
-      vi.mocked(fetchLinearTeamStates).mockResolvedValue([{
-        id: "team-1",
-        key: "ENG",
-        name: "Engineering",
-        states: [{ id: "state-backlog", name: "Backlog", type: "backlog" }],
-      }]);
-      vi.mocked(transitionLinearIssue).mockResolvedValue({ ok: false, error: "API error" });
-
-      const result = await orchestrator.archiveSession("s1", { linearTransition: "backlog" });
-
-      expect(result.ok).toBe(true);
-      expect(result.linearTransition?.ok).toBe(false);
-      expect(deps.launcher.setArchived).toHaveBeenCalledWith("s1", true);
-    });
-
-    it("catches thrown transition errors and still archives", async () => {
-      // When transitionLinearIssue throws, archiveSession should catch it
-      // and continue with the archive operation.
-      vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue({
-        id: "issue-1",
-        identifier: "ENG-42",
-        teamId: "team-1",
-        connectionId: "conn-1",
-      } as any);
-      vi.mocked(resolveApiKey).mockReturnValue({ apiKey: "lin_api_123", connectionId: "conn-1" });
-      vi.mocked(fetchLinearTeamStates).mockResolvedValue([{
-        id: "team-1",
-        key: "ENG",
-        name: "Engineering",
-        states: [{ id: "state-backlog", name: "Backlog", type: "backlog" }],
-      }]);
-      vi.mocked(transitionLinearIssue).mockRejectedValue(new Error("Network error"));
-
-      const result = await orchestrator.archiveSession("s1", { linearTransition: "backlog" });
-
-      expect(result.ok).toBe(true);
-      expect(result.linearTransition).toEqual({ ok: false, error: "Transition failed unexpectedly" });
-      expect(deps.launcher.setArchived).toHaveBeenCalledWith("s1", true);
-    });
-
-    it("skips transition when no target state found", async () => {
-      // When the target state cannot be found (e.g., team has no backlog state),
-      // linearTransition should be marked as skipped.
-      vi.mocked(sessionLinearIssues.getLinearIssue).mockReturnValue({
-        id: "issue-1",
-        identifier: "ENG-42",
-        teamId: "team-1",
-        connectionId: "conn-1",
-      } as any);
-      vi.mocked(resolveApiKey).mockReturnValue({ apiKey: "lin_api_123", connectionId: "conn-1" });
-      vi.mocked(fetchLinearTeamStates).mockResolvedValue([{
-        id: "team-1",
-        key: "ENG",
-        name: "Engineering",
-        states: [{ id: "state-done", name: "Done", type: "completed" }],
-        // No backlog state
-      }]);
-
-      const result = await orchestrator.archiveSession("s1", { linearTransition: "backlog" });
-
-      expect(result.ok).toBe(true);
-      expect(result.linearTransition).toEqual({ ok: true, skipped: true });
-    });
-
     it("cleans up worktree during archive", async () => {
       deps.worktreeTracker.getBySession.mockReturnValue({
         sessionId: "s1",
@@ -1178,14 +1031,13 @@ describe("SessionOrchestrator", () => {
   // ── Delete ────────────────────────────────────────────────────────────────
 
   describe("deleteSession()", () => {
-    it("performs full cleanup: kill, container, worktree, PR, Linear, bridge", async () => {
+    it("performs full cleanup: kill, container, worktree, PR, bridge", async () => {
       const result = await orchestrator.deleteSession("s1");
 
       expect(result.ok).toBe(true);
       expect(deps.launcher.kill).toHaveBeenCalledWith("s1");
       expect(containerManager.removeContainer).toHaveBeenCalledWith("s1");
       expect(deps.prPoller.unwatch).toHaveBeenCalledWith("s1");
-      expect(sessionLinearIssues.removeLinearIssue).toHaveBeenCalledWith("s1");
       expect(deps.launcher.removeSession).toHaveBeenCalledWith("s1");
       expect(deps.wsBridge.closeSession).toHaveBeenCalledWith("s1");
     });

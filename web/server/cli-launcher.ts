@@ -105,18 +105,10 @@ export interface SdkSessionInfo {
   codexInternetAccess?: boolean;
   /** Sandbox mode selected for Codex sessions */
   codexSandbox?: "workspace-write" | "danger-full-access";
-  /** If this session was spawned by a cron job */
-  cronJobId?: string;
-  /** Human-readable name of the cron job that spawned this session */
-  cronJobName?: string;
   /** If session was created from an existing Claude thread/session. */
   resumeSessionAt?: string;
   /** Whether the resumed session used --fork-session. */
   forkSession?: boolean;
-  /** If this session was spawned by an agent */
-  agentId?: string;
-  /** Human-readable name of the agent that spawned this session */
-  agentName?: string;
   /** Sandbox profile slug used for this session */
   sandboxSlug?: string;
 

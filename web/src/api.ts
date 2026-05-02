@@ -227,14 +227,6 @@ export interface CreateSessionOpts {
   container?: ContainerCreateOpts;
   resumeSessionAt?: string;
   forkSession?: boolean;
-  linearConnectionId?: string;
-  linearIssue?: {
-    identifier: string;
-    title: string;
-    stateName: string;
-    teamName: string;
-    url: string;
-  };
 }
 
 export interface BackendInfo {
@@ -387,19 +379,6 @@ export interface BrowserStartResult {
   message?: string;
 }
 
-/** Keep in sync with web/server/tailscale-manager.ts TailscaleStatus */
-export interface TailscaleStatus {
-  installed: boolean;
-  binaryPath: string | null;
-  connected: boolean;
-  dnsName: string | null;
-  funnelActive: boolean;
-  funnelUrl: string | null;
-  error: string | null;
-  needsOperatorMode?: boolean;
-  warning?: string;
-}
-
 export interface AppSettings {
   anthropicApiKeyConfigured: boolean;
   anthropicModel: string;
@@ -407,14 +386,6 @@ export interface AppSettings {
   openaiApiKeyConfigured: boolean;
   codexDeviceAuthConfigured: boolean;
   onboardingCompleted: boolean;
-  linearApiKeyConfigured: boolean;
-  linearConnectionCount: number;
-  linearAutoTransition: boolean;
-  linearAutoTransitionStateName: string;
-  linearArchiveTransition: boolean;
-  linearArchiveTransitionStateName: string;
-  linearOAuthConfigured: boolean;
-  linearOAuthCredentialsSaved: boolean;
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
@@ -423,128 +394,9 @@ export interface AppSettings {
   dockerAutoUpdate: boolean;
 }
 
-export interface LinearOAuthConnectionSummary {
-  id: string;
-  name: string;
-  oauthClientId: string;
-  status: "connected" | "disconnected";
-  hasAccessToken: boolean;
-  hasClientSecret: boolean;
-  hasWebhookSecret: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface LinearConnectionSummary {
-  id: string;
-  name: string;
-  apiKeyLast4: string;
-  workspaceName: string;
-  workspaceId: string;
-  viewerName: string;
-  viewerEmail: string;
-  connected: boolean;
-  autoTransition: boolean;
-  autoTransitionStateId: string;
-  autoTransitionStateName: string;
-  archiveTransition: boolean;
-  archiveTransitionStateId: string;
-  archiveTransitionStateName: string;
-}
-
 export interface ArchiveInfo {
   hasLinkedIssue: boolean;
   issueNotDone: boolean;
-  issue?: {
-    id: string;
-    identifier: string;
-    stateName: string;
-    stateType: string;
-    teamId: string;
-  };
-  hasBacklogState?: boolean;
-  archiveTransitionConfigured?: boolean;
-  archiveTransitionStateName?: string;
-}
-
-export interface LinearWorkflowState {
-  id: string;
-  name: string;
-  type: string;
-}
-
-export interface LinearTeamStates {
-  id: string;
-  key: string;
-  name: string;
-  states: LinearWorkflowState[];
-}
-
-export interface LinearIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  description: string;
-  url: string;
-  branchName: string;
-  priorityLabel: string;
-  stateName: string;
-  stateType: string;
-  teamName: string;
-  teamKey: string;
-  teamId: string;
-  assigneeName?: string;
-  updatedAt?: string;
-  connectionId?: string;
-}
-
-export interface LinearConnectionInfo {
-  connected: boolean;
-  viewerId: string;
-  viewerName: string;
-  viewerEmail: string;
-  teamName: string;
-  teamKey: string;
-}
-
-export interface LinearComment {
-  id: string;
-  body: string;
-  createdAt: string;
-  userName: string;
-  userAvatarUrl?: string | null;
-}
-
-export interface LinearIssueDetail {
-  issue: LinearIssue | null;
-  comments?: LinearComment[];
-  assignee?: { name: string; avatarUrl?: string | null } | null;
-  labels?: { id: string; name: string; color: string }[];
-}
-
-export interface LinearProject {
-  id: string;
-  name: string;
-  state: string;
-}
-
-export interface LinearProjectMapping {
-  repoRoot: string;
-  projectId: string;
-  projectName: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface CreateLinearIssueInput {
-  title: string;
-  description?: string;
-  teamId: string;
-  priority?: number;
-  projectId?: string;
-  assigneeId?: string;
-  stateId?: string;
-  connectionId?: string;
 }
 
 export interface GitHubPRInfo {
@@ -565,143 +417,6 @@ export interface GitHubPRInfo {
 export interface PRStatusResponse {
   available: boolean;
   pr: GitHubPRInfo | null;
-}
-
-export interface CronJobInfo {
-  id: string;
-  name: string;
-  prompt: string;
-  schedule: string;
-  recurring: boolean;
-  backendType: "claude" | "codex";
-  model: string;
-  cwd: string;
-  envSlug?: string;
-  enabled: boolean;
-  permissionMode: string;
-  codexInternetAccess?: boolean;
-  createdAt: number;
-  updatedAt: number;
-  lastRunAt?: number;
-  lastSessionId?: string;
-  consecutiveFailures: number;
-  totalRuns: number;
-  nextRunAt?: number | null;
-}
-
-export interface CronJobExecution {
-  sessionId: string;
-  jobId: string;
-  startedAt: number;
-  completedAt?: number;
-  success?: boolean;
-  error?: string;
-  costUsd?: number;
-}
-
-export interface McpServerConfigAgent {
-  type: "stdio" | "sse" | "http";
-  command?: string;
-  args?: string[];
-  url?: string;
-  env?: Record<string, string>;
-}
-
-export interface AgentInfo {
-  id: string;
-  version: 1;
-  name: string;
-  description: string;
-  icon?: string;
-  backendType: "claude" | "codex";
-  model: string;
-  permissionMode: string;
-  cwd: string;
-  envSlug?: string;
-  env?: Record<string, string>;
-  allowedTools?: string[];
-  codexInternetAccess?: boolean;
-  prompt: string;
-  mcpServers?: Record<string, McpServerConfigAgent>;
-  skills?: string[];
-  container?: {
-    image?: string;
-    ports?: number[];
-    volumes?: string[];
-    initScript?: string;
-  };
-  branch?: string;
-  createBranch?: boolean;
-  useWorktree?: boolean;
-  triggers?: {
-    webhook?: {
-      enabled: boolean;
-      secret: string;
-    };
-    schedule?: {
-      enabled: boolean;
-      expression: string;
-      recurring: boolean;
-    };
-    /** Linear Agent Interaction SDK trigger (per-agent OAuth app) */
-    linear?: {
-      enabled: boolean;
-      /** Reference to a LinearOAuthConnection by ID (new model) */
-      oauthConnectionId?: string;
-      /** Resolved name of the referenced OAuth connection */
-      oauthConnectionName?: string;
-      /** Resolved status of the referenced OAuth connection */
-      oauthConnectionStatus?: string;
-      /** @deprecated OAuth app client ID (legacy inline model) */
-      oauthClientId?: string;
-      /** Whether the agent has an access token (OAuth connected) */
-      hasAccessToken?: boolean;
-      /** Whether the agent has a client secret configured */
-      hasClientSecret?: boolean;
-      /** Whether the agent has a webhook secret configured */
-      hasWebhookSecret?: boolean;
-    };
-  };
-  enabled: boolean;
-  createdAt: number;
-  updatedAt: number;
-  lastRunAt?: number;
-  lastSessionId?: string;
-  totalRuns: number;
-  consecutiveFailures: number;
-  nextRunAt?: number | null;
-}
-
-export interface AgentExecution {
-  sessionId: string;
-  agentId: string;
-  triggerType: "manual" | "webhook" | "schedule" | "linear";
-  startedAt: number;
-  completedAt?: number;
-  success?: boolean;
-  error?: string;
-}
-
-export interface ExecutionListResult {
-  executions: AgentExecution[];
-  total: number;
-}
-
-/** Portable export format (no internal tracking fields) */
-export type AgentExport = Omit<
-  AgentInfo,
-  "id" | "createdAt" | "updatedAt" | "totalRuns" | "consecutiveFailures" | "lastRunAt" | "lastSessionId" | "enabled" | "nextRunAt"
->;
-
-export interface SavedPrompt {
-  id: string;
-  name: string;
-  content: string;
-  scope: "global" | "project";
-  projectPath?: string;
-  projectPaths?: string[];
-  createdAt: number;
-  updatedAt: number;
 }
 
 // ─── Claude Config Browser ──────────────────────────────────────────────────
@@ -879,7 +594,7 @@ export const api = {
   relaunchSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/relaunch`),
 
-  archiveSession: (sessionId: string, opts?: { force?: boolean; linearTransition?: "none" | "backlog" | "configured" }) =>
+  archiveSession: (sessionId: string, opts?: { force?: boolean }) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/archive`, opts),
 
   getArchiveInfo: (sessionId: string) =>
@@ -949,96 +664,12 @@ export const api = {
     claudeCodeOAuthToken?: string;
     openaiApiKey?: string;
     onboardingCompleted?: boolean;
-    linearApiKey?: string;
-    linearAutoTransition?: boolean;
-    linearAutoTransitionStateId?: string;
-    linearAutoTransitionStateName?: string;
-    linearArchiveTransition?: boolean;
-    linearArchiveTransitionStateId?: string;
-    linearArchiveTransitionStateName?: string;
-    linearOAuthClientId?: string;
-    linearOAuthClientSecret?: string;
-    linearOAuthWebhookSecret?: string;
     publicUrl?: string;
     updateChannel?: "stable" | "prerelease";
     dockerAutoUpdate?: boolean;
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>
     post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
-
-  // Tailscale
-  getTailscaleStatus: () => get<TailscaleStatus>("/tailscale/status"),
-  startTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/start"),
-  stopTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/stop"),
-
-  // Linear connections CRUD
-  listLinearConnections: () =>
-    get<{ connections: LinearConnectionSummary[] }>("/linear/connections"),
-  createLinearConnection: (data: { name: string; apiKey: string }) =>
-    post<{ connection: LinearConnectionSummary; verified: boolean; error?: string }>(
-      "/linear/connections",
-      data,
-    ),
-  updateLinearConnection: (id: string, data: Record<string, unknown>) =>
-    put<{ connection: LinearConnectionSummary }>(`/linear/connections/${encodeURIComponent(id)}`, data),
-  deleteLinearConnection: (id: string) =>
-    del<{ ok: boolean }>(`/linear/connections/${encodeURIComponent(id)}`),
-  verifyLinearConnection: (id: string) =>
-    post<{ connection: LinearConnectionSummary; verified: boolean; error?: string }>(
-      `/linear/connections/${encodeURIComponent(id)}/verify`,
-      {},
-    ),
-
-  searchLinearIssues: (query: string, limit = 8, connectionId?: string) =>
-    get<{ issues: LinearIssue[] }>(
-      `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}${connectionId ? `&connectionId=${encodeURIComponent(connectionId)}` : ""}`,
-    ),
-  getLinearConnection: (connectionId?: string) =>
-    get<LinearConnectionInfo>(`/linear/connection${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ""}`),
-  getLinearStates: (connectionId?: string) =>
-    get<{ teams: LinearTeamStates[] }>(`/linear/states${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ""}`),
-  transitionLinearIssue: (issueId: string, connectionId?: string) =>
-    post<{ ok: boolean; skipped: boolean }>(
-      `/linear/issues/${encodeURIComponent(issueId)}/transition${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ""}`,
-      {},
-    ),
-  listLinearProjects: (connectionId?: string) =>
-    get<{ projects: LinearProject[] }>(`/linear/projects${connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : ""}`),
-  getLinearProjectIssues: (projectId: string, limit = 15, connectionId?: string) =>
-    get<{ issues: LinearIssue[] }>(
-      `/linear/project-issues?projectId=${encodeURIComponent(projectId)}&limit=${encodeURIComponent(String(limit))}${connectionId ? `&connectionId=${encodeURIComponent(connectionId)}` : ""}`,
-    ),
-  getLinearProjectMapping: (repoRoot: string) =>
-    get<{ mapping: LinearProjectMapping | null }>(
-      `/linear/project-mappings?repoRoot=${encodeURIComponent(repoRoot)}`,
-    ),
-  upsertLinearProjectMapping: (data: {
-    repoRoot: string;
-    projectId: string;
-    projectName: string;
-  }) => put<{ mapping: LinearProjectMapping }>("/linear/project-mappings", data),
-  removeLinearProjectMapping: (repoRoot: string) =>
-    del<{ ok: boolean }>("/linear/project-mappings", { repoRoot }),
-
-  // Linear issue <-> session association
-  linkLinearIssue: (sessionId: string, issue: LinearIssue, connectionId?: string) =>
-    put<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`, {
-      ...issue,
-      ...(connectionId !== undefined ? { connectionId } : {}),
-    }),
-  unlinkLinearIssue: (sessionId: string) =>
-    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`),
-  getLinkedLinearIssue: (sessionId: string, refresh = false) =>
-    get<LinearIssueDetail>(
-      `/sessions/${encodeURIComponent(sessionId)}/linear-issue${refresh ? "?refresh=true" : ""}`,
-    ),
-  createLinearIssue: (input: CreateLinearIssueInput) =>
-    post<{ ok: boolean; issue: LinearIssue }>("/linear/issues", input),
-  addLinearComment: (issueId: string, body: string, connectionId?: string) =>
-    post<{ ok: boolean; comment: LinearComment }>(
-      `/linear/issues/${encodeURIComponent(issueId)}/comments`,
-      { body, connectionId },
-    ),
 
   // Git operations
   getRepoInfo: (path: string) =>
@@ -1181,18 +812,6 @@ export const api = {
   triggerUpdate: () =>
     post<{ ok: boolean; message: string }>("/update"),
 
-  // Cron jobs
-  listCronJobs: () => get<CronJobInfo[]>("/cron/jobs"),
-  getCronJob: (id: string) => get<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}`),
-  createCronJob: (data: Partial<CronJobInfo>) => post<CronJobInfo>("/cron/jobs", data),
-  updateCronJob: (id: string, data: Partial<CronJobInfo>) =>
-    put<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}`, data),
-  deleteCronJob: (id: string) => del(`/cron/jobs/${encodeURIComponent(id)}`),
-  toggleCronJob: (id: string) => post<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}/toggle`),
-  runCronJob: (id: string) => post(`/cron/jobs/${encodeURIComponent(id)}/run`),
-  getCronJobExecutions: (id: string) =>
-    get<CronJobExecution[]>(`/cron/jobs/${encodeURIComponent(id)}/executions`),
-
   // Background process management
   killProcess: (sessionId: string, taskId: string) =>
     post<{ ok: boolean; taskId: string }>(
@@ -1214,75 +833,6 @@ export const api = {
       `/sessions/${encodeURIComponent(sessionId)}/processes/system/${pid}/kill`,
     ),
 
-  // Agents
-  listAgents: () => get<AgentInfo[]>("/agents"),
-  getAgent: (id: string) => get<AgentInfo>(`/agents/${encodeURIComponent(id)}`),
-  createAgent: (data: Partial<AgentInfo> & { stagingId?: string; cloneFromAgentId?: string }) =>
-    post<AgentInfo>("/agents", data),
-  updateAgent: (id: string, data: Partial<AgentInfo>) =>
-    put<AgentInfo>(`/agents/${encodeURIComponent(id)}`, data),
-  deleteAgent: (id: string) => del(`/agents/${encodeURIComponent(id)}`),
-  toggleAgent: (id: string) => post<AgentInfo>(`/agents/${encodeURIComponent(id)}/toggle`),
-  runAgent: (id: string, input?: string) =>
-    post<{ ok: boolean; message: string }>(`/agents/${encodeURIComponent(id)}/run`, { input }),
-  getAgentExecutions: (id: string) =>
-    get<AgentExecution[]>(`/agents/${encodeURIComponent(id)}/executions`),
-  importAgent: (data: AgentExport) => post<AgentInfo>("/agents/import", data),
-  exportAgent: (id: string) => get<AgentExport>(`/agents/${encodeURIComponent(id)}/export`),
-  regenerateAgentWebhookSecret: (id: string) =>
-    post<AgentInfo>(`/agents/${encodeURIComponent(id)}/regenerate-secret`),
-
-  // Executions (cross-agent, for Runs view)
-  listExecutions: (opts?: { agentId?: string; triggerType?: string; status?: string; limit?: number; offset?: number }) => {
-    const params = new URLSearchParams();
-    if (opts?.agentId) params.set("agentId", opts.agentId);
-    if (opts?.triggerType) params.set("triggerType", opts.triggerType);
-    if (opts?.status) params.set("status", opts.status);
-    if (opts?.limit) params.set("limit", String(opts.limit));
-    if (opts?.offset) params.set("offset", String(opts.offset));
-    const qs = params.toString();
-    return get<ExecutionListResult>(`/executions${qs ? `?${qs}` : ""}`);
-  },
-
-  // Linear OAuth (Agent Interaction SDK)
-  getLinearOAuthStatus: (stagingId?: string) => {
-    const params = new URLSearchParams();
-    if (stagingId) params.set("stagingId", stagingId);
-    const qs = params.toString();
-    return get<{ configured: boolean; hasClientId: boolean; hasClientSecret: boolean; hasWebhookSecret: boolean; hasAccessToken: boolean }>(
-      `/linear/oauth/status${qs ? `?${qs}` : ""}`,
-    );
-  },
-  getLinearOAuthAuthorizeUrl: (returnTo?: string, stagingId?: string) => {
-    const params = new URLSearchParams();
-    if (returnTo) params.set("returnTo", returnTo);
-    if (stagingId) params.set("stagingId", stagingId);
-    const qs = params.toString();
-    return get<{ url: string }>(`/linear/oauth/authorize-url${qs ? `?${qs}` : ""}`);
-  },
-  disconnectLinearOAuth: () =>
-    post<{ ok: boolean }>("/linear/oauth/disconnect"),
-
-  // Linear OAuth staging slots (per-wizard credential storage)
-  createLinearStaging: (creds: { clientId: string; clientSecret: string; webhookSecret: string }) =>
-    post<{ stagingId: string }>("/linear/oauth/staging", creds),
-  getLinearStagingStatus: (id: string) =>
-    get<{ exists: boolean; hasAccessToken: boolean; hasClientId: boolean; hasClientSecret: boolean }>(`/linear/oauth/staging/${encodeURIComponent(id)}/status`),
-  deleteLinearStaging: (id: string) =>
-    del(`/linear/oauth/staging/${encodeURIComponent(id)}`),
-
-  // Linear OAuth connections (standalone OAuth app management)
-  listLinearOAuthConnections: () =>
-    get<{ connections: LinearOAuthConnectionSummary[] }>("/linear/oauth-connections"),
-  createLinearOAuthConnection: (data: { name: string; oauthClientId: string; oauthClientSecret: string; webhookSecret: string }) =>
-    post<{ connection: LinearOAuthConnectionSummary }>("/linear/oauth-connections", data),
-  updateLinearOAuthConnection: (id: string, data: Record<string, unknown>) =>
-    put<{ connection: LinearOAuthConnectionSummary }>(`/linear/oauth-connections/${encodeURIComponent(id)}`, data),
-  deleteLinearOAuthConnection: (id: string) =>
-    del<{ ok: boolean }>(`/linear/oauth-connections/${encodeURIComponent(id)}`),
-  getLinearOAuthConnectionAuthorizeUrl: (id: string, returnTo?: string) =>
-    get<{ url: string }>(`/linear/oauth-connections/${encodeURIComponent(id)}/authorize-url${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`),
-
   // Skills
   listSkills: () =>
     get<{ slug: string; name: string; description: string; path: string }[]>("/skills"),
@@ -1290,19 +840,4 @@ export const api = {
   // Cross-session messaging
   sendSessionMessage: (sessionId: string, content: string) =>
     post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/message`, { content }),
-
-  // Saved prompts
-  listPrompts: (cwd?: string, scope?: "global" | "project" | "all") => {
-    const params = new URLSearchParams();
-    if (cwd) params.set("cwd", cwd);
-    if (scope) params.set("scope", scope);
-    const query = params.toString();
-    return get<SavedPrompt[]>(`/prompts${query ? `?${query}` : ""}`);
-  },
-  createPrompt: (data: { name: string; content: string; scope: "global" | "project"; cwd?: string; projectPaths?: string[] }) =>
-    post<SavedPrompt>("/prompts", data),
-  updatePrompt: (id: string, data: { name?: string; content?: string; scope?: "global" | "project"; projectPaths?: string[] }) =>
-    put<SavedPrompt>(`/prompts/${encodeURIComponent(id)}`, data),
-  deletePrompt: (id: string) =>
-    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}`),
 };

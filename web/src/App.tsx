@@ -20,16 +20,8 @@ import { OnboardingModal } from "./components/OnboardingModal.js";
 // Lazy-loaded route-level pages (not needed for initial render)
 const Playground = lazy(() => import("./components/Playground.js").then((m) => ({ default: m.Playground })));
 const SettingsPage = lazy(() => import("./components/SettingsPage.js").then((m) => ({ default: m.SettingsPage })));
-const IntegrationsPage = lazy(() => import("./components/IntegrationsPage.js").then((m) => ({ default: m.IntegrationsPage })));
-const LinearSettingsPage = lazy(() => import("./components/LinearSettingsPage.js").then((m) => ({ default: m.LinearSettingsPage })));
-const LinearOAuthSettingsPage = lazy(() => import("./components/LinearOAuthSettingsPage.js").then((m) => ({ default: m.LinearOAuthSettingsPage })));
-const TailscalePage = lazy(() => import("./components/TailscalePage.js").then((m) => ({ default: m.TailscalePage })));
-const PromptsPage = lazy(() => import("./components/PromptsPage.js").then((m) => ({ default: m.PromptsPage })));
 const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => ({ default: m.EnvManager })));
 const SandboxManager = lazy(() => import("./components/SandboxManager.js").then((m) => ({ default: m.SandboxManager })));
-const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
-const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => ({ default: m.AgentsPage })));
-const RunsPage = lazy(() => import("./components/RunsPage.js").then((m) => ({ default: m.RunsPage })));
 
 
 function LazyFallback() {
@@ -63,16 +55,8 @@ export default function App() {
   const hash = useHash();
   const route = useMemo(() => parseHash(hash), [hash]);
   const isSettingsPage = route.page === "settings";
-  const isPromptsPage = route.page === "prompts";
-  const isIntegrationsPage = route.page === "integrations";
-  const isLinearIntegrationPage = route.page === "integration-linear";
-  const isLinearOAuthIntegrationPage = route.page === "integration-linear-oauth";
-  const isTailscaleIntegrationPage = route.page === "integration-tailscale";
   const isEnvironmentsPage = route.page === "environments";
   const isSandboxesPage = route.page === "sandboxes";
-  const isScheduledPage = route.page === "scheduled";
-  const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
-  const isRunsPage = route.page === "runs";
   const isSessionView = route.page === "session" || route.page === "home";
 
   useEffect(() => {
@@ -211,64 +195,15 @@ export default function App() {
             </div>
           )}
 
-          {isPromptsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><PromptsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isIntegrationsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><IntegrationsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isLinearIntegrationPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><LinearSettingsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isLinearOAuthIntegrationPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><LinearOAuthSettingsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isTailscaleIntegrationPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><TailscalePage embedded /></Suspense>
-            </div>
-          )}
-
           {isEnvironmentsPage && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><EnvManager embedded /></Suspense>
             </div>
           )}
 
-
           {isSandboxesPage && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><SandboxManager embedded /></Suspense>
-            </div>
-          )}
-
-          {isScheduledPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><CronManager embedded /></Suspense>
-            </div>
-          )}
-
-          {isAgentsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><AgentsPage route={route} /></Suspense>
-            </div>
-          )}
-
-          {isRunsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><RunsPage /></Suspense>
             </div>
           )}
 

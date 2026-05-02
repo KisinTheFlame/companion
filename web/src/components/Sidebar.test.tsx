@@ -463,18 +463,6 @@ describe("Sidebar", () => {
     expect(window.location.hash).toBe("#/settings");
   });
 
-  it("navigates to integrations page when Integrations is clicked", () => {
-    render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Integrations"));
-    expect(window.location.hash).toBe("#/integrations");
-  });
-
-  it("navigates to prompts page when Prompts is clicked", () => {
-    render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Prompts"));
-    expect(window.location.hash).toBe("#/prompts");
-  });
-
   it("session name shows animate-name-appear class when recently renamed", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
@@ -760,9 +748,7 @@ describe("Sidebar", () => {
     render(<Sidebar />);
     // Full labels should be visible (not short labels)
     expect(screen.getByText("Environments")).toBeInTheDocument();
-    expect(screen.getByText("Integrations")).toBeInTheDocument();
-    expect(screen.getByText("Agents")).toBeInTheDocument();
-    expect(screen.getByText("Prompts")).toBeInTheDocument();
+    expect(screen.getByText("Sandboxes")).toBeInTheDocument();
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
@@ -770,7 +756,6 @@ describe("Sidebar", () => {
     // Verifies that the redesigned menu exposes explicit grouping labels
     // to improve scanability and information architecture.
     render(<Sidebar />);
-    expect(screen.getByText("Workbench")).toBeInTheDocument();
     expect(screen.getByText("Workspace")).toBeInTheDocument();
     expect(screen.getByText("Resources")).toBeInTheDocument();
   });
@@ -859,8 +844,8 @@ describe("Sidebar", () => {
     // Verifies footer nav buttons have title attributes for tooltip/screen reader support.
     render(<Sidebar />);
     // Footer nav items should have descriptive titles from NAV_ITEMS
-    expect(screen.getByTitle("Prompts")).toBeInTheDocument();
-    expect(screen.getByTitle("Integrations")).toBeInTheDocument();
+    expect(screen.getByTitle("Environments")).toBeInTheDocument();
+    expect(screen.getByTitle("Sandboxes")).toBeInTheDocument();
     expect(screen.getByTitle("Settings")).toBeInTheDocument();
   });
 
@@ -1454,91 +1439,6 @@ describe("Sidebar", () => {
 
   // ─── Archive with linked Linear issue ─────────────────────────────────────
 
-  it("shows archive modal when session has a linked non-done Linear issue", async () => {
-    // Verifies that archiving a session linked to a non-done Linear issue
-    // shows the ArchiveLinearModal instead of archiving directly.
-    const session = makeSession("s1", { is_containerized: false });
-    const sdk = makeSdkSession("s1");
-    const linkedIssues = new Map<string, unknown>([["s1", {
-      id: "issue-1",
-      identifier: "ENG-42",
-      title: "Test",
-      stateType: "started",
-      stateName: "In Progress",
-    }]]);
-    mockState = createMockState({
-      sessions: new Map([["s1", session]]),
-      sdkSessions: [sdk],
-      linkedLinearIssues: linkedIssues,
-    });
-    mockApi.getArchiveInfo.mockResolvedValue({
-      hasLinkedIssue: true,
-      issueNotDone: true,
-      issue: { id: "issue-1", identifier: "ENG-42", stateName: "In Progress", stateType: "started", teamId: "team-1" },
-      hasBacklogState: true,
-      archiveTransitionConfigured: false,
-    });
-
-    render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Session actions"));
-    fireEvent.click(screen.getByText("Archive"));
-
-    // Wait for modal to appear (getArchiveInfo is async)
-    await vi.waitFor(() => {
-      expect(screen.getByText("Archive session")).toBeInTheDocument();
-    });
-    expect(screen.getByText("ENG-42")).toBeInTheDocument();
-  });
-
-  it("archives directly when session has no linked Linear issue", async () => {
-    // Verifies that the modal is NOT shown for sessions without a linked issue.
-    const session = makeSession("s1", { is_containerized: false });
-    const sdk = makeSdkSession("s1");
-    mockState = createMockState({
-      sessions: new Map([["s1", session]]),
-      sdkSessions: [sdk],
-      linkedLinearIssues: new Map(),
-    });
-
-    render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Session actions"));
-    fireEvent.click(screen.getByText("Archive"));
-
-    // Should archive directly
-    await vi.waitFor(() => {
-      expect(mockApi.archiveSession).toHaveBeenCalledWith("s1", undefined);
-    });
-    // Modal should NOT appear
-    expect(screen.queryByText("Archive session")).not.toBeInTheDocument();
-  });
-
-  it("archives directly when linked issue is already done", async () => {
-    // Verifies that completed issues don't trigger the modal.
-    const session = makeSession("s1", { is_containerized: false });
-    const sdk = makeSdkSession("s1");
-    const linkedIssues = new Map<string, unknown>([["s1", {
-      id: "issue-1",
-      identifier: "ENG-42",
-      title: "Test",
-      stateType: "completed",
-      stateName: "Done",
-    }]]);
-    mockState = createMockState({
-      sessions: new Map([["s1", session]]),
-      sdkSessions: [sdk],
-      linkedLinearIssues: linkedIssues,
-    });
-
-    render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Session actions"));
-    fireEvent.click(screen.getByText("Archive"));
-
-    // Should archive directly since issue is done
-    await vi.waitFor(() => {
-      expect(mockApi.archiveSession).toHaveBeenCalledWith("s1", undefined);
-    });
-  });
-
   // ─── Unarchive flow ────────────────────────────────────────────────────────
 
   it("clicking Restore on an archived session calls api.unarchiveSession", async () => {
@@ -1563,118 +1463,12 @@ describe("Sidebar", () => {
     expect(mockApi.listSessions).toHaveBeenCalled();
   });
 
-  // ─── Cron sessions section ─────────────────────────────────────────────────
-
-  it("renders Scheduled Runs section when cron sessions exist", () => {
-    // Verifies that sessions with cronJobId are displayed in a separate
-    // "Scheduled Runs" section with the correct count.
-    const sdk1 = makeSdkSession("s1");
-    const sdk2 = makeSdkSession("s2", { cronJobId: "cron-1", cronJobName: "Daily Build" });
-    mockState = createMockState({
-      sdkSessions: [sdk1, sdk2],
-    });
-
-    render(<Sidebar />);
-    expect(screen.getByText(/Scheduled Runs \(1\)/)).toBeInTheDocument();
-  });
-
-  it("cron sessions are not shown in the active sessions list", () => {
-    // Verifies that sessions with a cronJobId are excluded from the main
-    // active sessions list and only appear under "Scheduled Runs".
-    const sdk1 = makeSdkSession("s1", { model: "regular-session" });
-    const sdk2 = makeSdkSession("s2", { model: "cron-session", cronJobId: "cron-1" });
-    mockState = createMockState({
-      sdkSessions: [sdk1, sdk2],
-    });
-
-    render(<Sidebar />);
-    // regular-session should be in the main list
-    expect(screen.getByText("regular-session")).toBeInTheDocument();
-    // cron-session should appear under Scheduled Runs, not in main list
-    expect(screen.getByText(/Scheduled Runs \(1\)/)).toBeInTheDocument();
-  });
-
-  it("toggling Scheduled Runs section hides/shows cron sessions", () => {
-    // Verifies that the Scheduled Runs section can be collapsed and expanded
-    // via its toggle button.
-    const sdk = makeSdkSession("s1", { model: "cron-model", cronJobId: "cron-1" });
-    mockState = createMockState({
-      sdkSessions: [sdk],
-    });
-
-    render(<Sidebar />);
-    // Initially expanded (showCronSessions defaults to true)
-    expect(screen.getByText("cron-model")).toBeInTheDocument();
-
-    // Click to collapse
-    fireEvent.click(screen.getByText(/Scheduled Runs \(1\)/));
-
-    // Session should be hidden
-    expect(screen.queryByText("cron-model")).not.toBeInTheDocument();
-
-    // Click again to expand
-    fireEvent.click(screen.getByText(/Scheduled Runs \(1\)/));
-    expect(screen.getByText("cron-model")).toBeInTheDocument();
-  });
-
-  // ─── Agent sessions section ────────────────────────────────────────────────
-
-  it("renders Agent Runs section when agent sessions exist", () => {
-    // Verifies that sessions with agentId are displayed in a separate
-    // "Agent Runs" section with the correct count.
-    const sdk1 = makeSdkSession("s1");
-    const sdk2 = makeSdkSession("s2", { agentId: "agent-1", agentName: "Code Reviewer" });
-    mockState = createMockState({
-      sdkSessions: [sdk1, sdk2],
-    });
-
-    render(<Sidebar />);
-    expect(screen.getByText(/Agent Runs \(1\)/)).toBeInTheDocument();
-  });
-
-  it("agent sessions are separate from active sessions", () => {
-    // Verifies that sessions with agentId do not appear in the main active
-    // sessions list.
-    const sdk1 = makeSdkSession("s1", { model: "normal" });
-    const sdk2 = makeSdkSession("s2", { model: "agent-one", agentId: "agent-1" });
-    mockState = createMockState({
-      sdkSessions: [sdk1, sdk2],
-    });
-
-    render(<Sidebar />);
-    expect(screen.getByText("normal")).toBeInTheDocument();
-    expect(screen.getByText(/Agent Runs \(1\)/)).toBeInTheDocument();
-  });
-
-  it("toggling Agent Runs section hides/shows agent sessions", () => {
-    // Verifies that the Agent Runs section can be collapsed and expanded.
-    // Note: we need at least one active session to prevent the "No sessions yet."
-    // empty state from hiding the agent sessions section entirely.
-    const sdkActive = makeSdkSession("s-active", { model: "active-model" });
-    const sdk = makeSdkSession("s1", { model: "agent-model", agentId: "agent-1" });
-    mockState = createMockState({
-      sdkSessions: [sdkActive, sdk],
-    });
-
-    render(<Sidebar />);
-    // Initially expanded
-    expect(screen.getByText("agent-model")).toBeInTheDocument();
-
-    // Collapse
-    fireEvent.click(screen.getByText(/Agent Runs \(1\)/));
-    expect(screen.queryByText("agent-model")).not.toBeInTheDocument();
-
-    // Expand again
-    fireEvent.click(screen.getByText(/Agent Runs \(1\)/));
-    expect(screen.getByText("agent-model")).toBeInTheDocument();
-  });
-
   // ─── Footer nav behavior ───────────────────────────────────────────────────
 
   it("clicking a nav item updates the hash", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Prompts"));
-    expect(window.location.hash).toBe("#/prompts");
+    fireEvent.click(screen.getByTitle("Environments"));
+    expect(window.location.hash).toBe("#/environments");
   });
 
   it("New Session button routes home", () => {
@@ -1709,26 +1503,6 @@ describe("Sidebar", () => {
 
     const settingsBtn = screen.getByTitle("Settings");
     expect(settingsBtn).toHaveClass("bg-cc-active");
-  });
-
-  it("integrations nav button shows active for both integrations and integration-linear pages", () => {
-    // Verifies that the Integrations nav button correctly uses activePages
-    // to highlight for sub-pages like integration-linear.
-    window.location.hash = "#/integrations";
-    render(<Sidebar />);
-
-    const integrationsBtn = screen.getByTitle("Integrations");
-    expect(integrationsBtn).toHaveClass("bg-cc-active");
-  });
-
-  it("agents nav button is active on agent detail routes with aria-current", () => {
-    // Verifies active state semantics for nested agent pages.
-    window.location.hash = "#/agents/agent-123";
-    render(<Sidebar />);
-
-    const agentsBtn = screen.getByTitle("Agents");
-    expect(agentsBtn).toHaveClass("bg-cc-active");
-    expect(agentsBtn).toHaveAttribute("aria-current", "page");
   });
 
   // ─── Close sidebar button (mobile) ─────────────────────────────────────────
@@ -1901,19 +1675,6 @@ describe("Sidebar", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(mockApi.renameSession).toHaveBeenCalledWith("s1", "New Name");
-  });
-
-  // ─── Session with cron badge ───────────────────────────────────────────────
-
-  it("session with cronJobId shows Scheduled badge", () => {
-    // Verifies that a session with a cron job ID displays the scheduled clock badge.
-    const sdk = makeSdkSession("s1", { cronJobId: "cron-1" });
-    mockState = createMockState({
-      sdkSessions: [sdk],
-    });
-
-    render(<Sidebar />);
-    expect(screen.getByTitle("Scheduled")).toBeInTheDocument();
   });
 
   // ─── Delete all singular text ──────────────────────────────────────────────

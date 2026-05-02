@@ -145,28 +145,8 @@ vi.mock("./components/SettingsPage.js", () => ({
   SettingsPage: () => <div data-testid="settings-page">SettingsPage</div>,
 }));
 
-vi.mock("./components/IntegrationsPage.js", () => ({
-  IntegrationsPage: () => <div data-testid="integrations-page">IntegrationsPage</div>,
-}));
-
-vi.mock("./components/LinearSettingsPage.js", () => ({
-  LinearSettingsPage: () => <div data-testid="linear-settings-page">LinearSettingsPage</div>,
-}));
-
-vi.mock("./components/PromptsPage.js", () => ({
-  PromptsPage: () => <div data-testid="prompts-page">PromptsPage</div>,
-}));
-
 vi.mock("./components/EnvManager.js", () => ({
   EnvManager: () => <div data-testid="env-manager">EnvManager</div>,
-}));
-
-vi.mock("./components/CronManager.js", () => ({
-  CronManager: () => <div data-testid="cron-manager">CronManager</div>,
-}));
-
-vi.mock("./components/AgentsPage.js", () => ({
-  AgentsPage: () => <div data-testid="agents-page">AgentsPage</div>,
 }));
 
 // ─── Import SUT after mocks ─────────────────────────────────────
@@ -302,43 +282,11 @@ describe("App", () => {
       });
     });
 
-    it("renders PromptsPage for prompts route", async () => {
-      (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "prompts" });
-      render(<App />);
-      await waitFor(() => {
-        expect(screen.getByTestId("prompts-page")).toBeInTheDocument();
-      });
-    });
-
-    it("renders IntegrationsPage for integrations route", async () => {
-      (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "integrations" });
-      render(<App />);
-      await waitFor(() => {
-        expect(screen.getByTestId("integrations-page")).toBeInTheDocument();
-      });
-    });
-
-    it("renders LinearSettingsPage for integration-linear route", async () => {
-      (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "integration-linear" });
-      render(<App />);
-      await waitFor(() => {
-        expect(screen.getByTestId("linear-settings-page")).toBeInTheDocument();
-      });
-    });
-
     it("renders EnvManager for environments route", async () => {
       (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "environments" });
       render(<App />);
       await waitFor(() => {
         expect(screen.getByTestId("env-manager")).toBeInTheDocument();
-      });
-    });
-
-    it("renders AgentsPage for agents route", async () => {
-      (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "agents" });
-      render(<App />);
-      await waitFor(() => {
-        expect(screen.getByTestId("agents-page")).toBeInTheDocument();
       });
     });
 

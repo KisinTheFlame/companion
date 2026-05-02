@@ -412,22 +412,12 @@ export interface SessionState {
     primary: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null;
     secondary: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null;
   };
-  /** If this session was spawned by a cron job */
-  cronJobId?: string;
-  /** Human-readable name of the cron job that spawned this session */
-  cronJobName?: string;
-  /** If this session was spawned by an agent */
-  agentId?: string;
-  /** Human-readable name of the agent that spawned this session */
-  agentName?: string;
   /** Per-session AI validation override. null/undefined = use global default */
   aiValidationEnabled?: boolean | null;
   /** Per-session auto-approve override. null/undefined = use global default */
   aiValidationAutoApprove?: boolean | null;
   /** Per-session auto-deny override. null/undefined = use global default */
   aiValidationAutoDeny?: boolean | null;
-  /** If this session is linked to a Linear agent session */
-  linearSessionId?: string;
 }
 
 // ─── MCP Types ───────────────────────────────────────────────────────────────

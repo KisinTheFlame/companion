@@ -10,7 +10,6 @@ import {
   type GitBranchInfo,
   type BackendInfo,
   type ImagePullState,
-  type LinearIssue,
 } from "../api.js";
 import { connectSession, createClientMessageId, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
@@ -22,11 +21,7 @@ import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
-import { LinearSection } from "./home/LinearSection.js";
 import { BranchPicker } from "./home/BranchPicker.js";
-import { MentionMenu } from "./MentionMenu.js";
-import { useMentionMenu } from "../utils/use-mention-menu.js";
-import type { SavedPrompt } from "../api.js";
 import type { SdkSessionInfo } from "../types.js";
 
 type ResumeCandidate = {
@@ -107,9 +102,6 @@ export function HomePage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
-  const [linearConfigured, setLinearConfigured] = useState(false);
-  const [selectedLinearIssue, setSelectedLinearIssue] = useState<LinearIssue | null>(null);
-  const [selectedLinearConnectionId, setSelectedLinearConnectionId] = useState<string | null>(null);
   const [showOnboardingTip, setShowOnboardingTip] = useState(
     () => localStorage.getItem("cc-onboarding-dismissed") !== "true",
   );
@@ -150,7 +142,7 @@ export function HomePage() {
   const [visibleResumeCandidateRows, setVisibleResumeCandidateRows] = useState(INITIAL_VISIBLE_SESSION_ROWS);
   const [resumeSearchQuery, setResumeSearchQuery] = useState("");
 
-  // Git branch state (owned here, driven by BranchPicker + LinearSection)
+  // Git branch state (owned here, driven by BranchPicker)
   const [gitRepoInfo, setGitRepoInfo] = useState<GitRepoInfo | null>(null);
   const [useWorktree, setUseWorktree] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -162,30 +154,12 @@ export function HomePage() {
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState("");
 
-  const [caretPos, setCaretPos] = useState(0);
-  const pendingSelectionRef = useRef<number | null>(null);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const envDropdownRef = useRef<HTMLDivElement>(null);
 
   const currentSessionId = useStore((s) => s.currentSessionId);
-
-  // @ mention support for saved prompts
-  const mention = useMentionMenu({
-    text,
-    caretPos,
-    cwd: cwd || undefined,
-  });
-
-  // Restore cursor position after prompt insertion
-  useEffect(() => {
-    if (pendingSelectionRef.current === null || !textareaRef.current) return;
-    const next = pendingSelectionRef.current;
-    textareaRef.current.setSelectionRange(next, next);
-    pendingSelectionRef.current = null;
-  }, [text]);
 
   // Auto-focus textarea (desktop only — on mobile it triggers the keyboard immediately)
   useEffect(() => {
@@ -205,9 +179,6 @@ export function HomePage() {
     api.listEnvs().then(setEnvs).catch(() => {});
     api.listSandboxes().then(setSandboxes).catch(() => {});
     api.getBackends().then(setBackends).catch(() => {});
-    api.getSettings().then((s) => {
-      setLinearConfigured(s.linearApiKeyConfigured);
-    }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When backend changes, reset model and mode to defaults
@@ -477,66 +448,12 @@ export function HomePage() {
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setText(e.target.value);
-    setCaretPos(e.target.selectionStart ?? e.target.value.length);
     const ta = e.target;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   }
 
-  function syncCaret() {
-    if (!textareaRef.current) return;
-    setCaretPos(textareaRef.current.selectionStart ?? 0);
-  }
-
-  function handleSelectPrompt(prompt: SavedPrompt) {
-    const result = mention.selectPrompt(prompt);
-    pendingSelectionRef.current = result.nextCursor;
-    setText(result.nextText);
-    mention.setMentionMenuOpen(false);
-    setCaretPos(result.nextCursor);
-    textareaRef.current?.focus();
-    // Auto-resize textarea after prompt insertion
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
-    }
-  }
-
   function handleKeyDown(e: React.KeyboardEvent) {
-    // @ mention menu navigation
-    if (mention.mentionMenuOpen) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        mention.setMentionMenuOpen(false);
-        return;
-      }
-    }
-    if (mention.mentionMenuOpen && mention.filteredPrompts.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        mention.setMentionMenuIndex((i) => (i + 1) % mention.filteredPrompts.length);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        mention.setMentionMenuIndex((i) => (i - 1 + mention.filteredPrompts.length) % mention.filteredPrompts.length);
-        return;
-      }
-      if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) {
-        e.preventDefault();
-        handleSelectPrompt(mention.filteredPrompts[mention.mentionMenuIndex]);
-        return;
-      }
-    }
-    if (
-      mention.mentionMenuOpen
-      && mention.filteredPrompts.length === 0
-      && ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey))
-    ) {
-      e.preventDefault();
-      return;
-    }
-
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
       const currentModes = getModesForBackend(backend);
@@ -552,19 +469,7 @@ export function HomePage() {
   }
 
   function buildInitialMessage(msg: string): string {
-    if (!selectedLinearIssue) return msg;
-    const description = (selectedLinearIssue.description ?? "").trim();
-    const context = [
-      "Linear issue context:",
-      `- Identifier: ${selectedLinearIssue.identifier}`,
-      `- Title: ${selectedLinearIssue.title}`,
-      selectedLinearIssue.stateName ? `- State: ${selectedLinearIssue.stateName}` : "",
-      selectedLinearIssue.priorityLabel ? `- Priority: ${selectedLinearIssue.priorityLabel}` : "",
-      selectedLinearIssue.teamName ? `- Team: ${selectedLinearIssue.teamName}` : "",
-      `- URL: ${selectedLinearIssue.url}`,
-      description ? `- Description:\n${description}` : "",
-    ].filter(Boolean).join("\n");
-    return `${context}\n\nUser request:\n${msg}`;
+    return msg;
   }
 
   async function handleSend() {
@@ -638,14 +543,6 @@ export function HomePage() {
           codexInternetAccess: backend === "codex" ? true : undefined,
           resumeSessionAt: effectiveResumeSessionAt,
           forkSession: effectiveForkSession,
-          linearConnectionId: selectedLinearIssue ? (selectedLinearConnectionId || undefined) : undefined,
-          linearIssue: selectedLinearIssue ? {
-            identifier: selectedLinearIssue.identifier,
-            title: selectedLinearIssue.title,
-            stateName: selectedLinearIssue.stateName,
-            teamName: selectedLinearIssue.teamName,
-            url: selectedLinearIssue.url,
-          } : undefined,
         },
         (progress) => {
           useStore.getState().addCreationProgress(progress);
@@ -713,17 +610,6 @@ export function HomePage() {
           content: initialMessage,
           images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
           timestamp: Date.now(),
-        });
-      }
-
-      // Auto-link Linear issue if one was selected
-      if (selectedLinearIssue) {
-        api.linkLinearIssue(sessionId, selectedLinearIssue, selectedLinearConnectionId || undefined)
-          .then(() => useStore.getState().setLinkedLinearIssue(sessionId, selectedLinearIssue))
-          .catch(() => { /* fire-and-forget: linking is best-effort */ });
-        // Fire-and-forget: transition Linear issue to configured status
-        api.transitionLinearIssue(selectedLinearIssue.id, selectedLinearConnectionId || undefined).catch(() => {
-          /* fire-and-forget: status transition is best-effort */
         });
       }
 
@@ -804,23 +690,9 @@ export function HomePage() {
     setIsNewBranch(isNew);
   }, []);
 
-  const handleBranchFromIssue = useCallback((branch: string, isNew: boolean) => {
-    setSelectedBranch(branch);
-    setIsNewBranch(isNew);
-  }, []);
-
   const handleBranchesLoaded = useCallback((loadedBranches: GitBranchInfo[]) => {
     setBranches(loadedBranches);
   }, []);
-
-  const handleIssueSelect = useCallback((issue: LinearIssue | null) => {
-    setSelectedLinearIssue(issue);
-    if (!issue && gitRepoInfo) {
-      // Revert branch to current when clearing Linear issue
-      setSelectedBranch(gitRepoInfo.currentBranch);
-      setIsNewBranch(false);
-    }
-  }, [gitRepoInfo]);
 
   const canSend = text.trim().length > 0 && !sending;
 
@@ -850,33 +722,9 @@ export function HomePage() {
 
         {/* Main input card — the hero element */}
         <div className="relative bg-cc-card border border-cc-border rounded-2xl shadow-sm">
-          <MentionMenu
-            open={mention.mentionMenuOpen}
-            loading={mention.promptsLoading}
-            prompts={mention.filteredPrompts}
-            selectedIndex={mention.mentionMenuIndex}
-            onSelect={handleSelectPrompt}
-            menuRef={mention.mentionMenuRef}
-            className="absolute left-2 right-2 bottom-full mb-1"
-          />
-          {/* Context badges (Linear issue, images) — inside card to avoid external shift */}
-          {(selectedLinearIssue || images.length > 0) && (
+          {/* Context badges (images) — inside card to avoid external shift */}
+          {images.length > 0 && (
             <div className="flex items-center gap-2 px-4 pt-3 flex-wrap">
-              {selectedLinearIssue && (
-                <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-cc-border bg-cc-hover/60 px-2.5 py-1.5 text-[11px] text-cc-muted">
-                  <span className="shrink-0">Linear</span>
-                  <span className="font-mono-code shrink-0">{selectedLinearIssue.identifier}</span>
-                  <span className="truncate">{selectedLinearIssue.title}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleIssueSelect(null)}
-                    className="shrink-0 rounded px-1 text-cc-muted hover:text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
-                    title="Remove Linear issue"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
               {images.map((img, i) => (
                 <div key={i} className="relative group">
                   <img
@@ -901,8 +749,6 @@ export function HomePage() {
             value={text}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            onClick={syncCaret}
-            onKeyUp={syncCaret}
             onPaste={handlePaste}
             aria-label="Task description"
             placeholder="Fix a bug, build a feature, refactor code..."
@@ -1504,15 +1350,6 @@ export function HomePage() {
               </div>
             )}
 
-            <LinearSection
-              cwd={cwd}
-              gitRepoInfo={gitRepoInfo}
-              linearConfigured={linearConfigured}
-              selectedLinearIssue={selectedLinearIssue}
-              onIssueSelect={handleIssueSelect}
-              onBranchFromIssue={handleBranchFromIssue}
-              onConnectionSelect={setSelectedLinearConnectionId}
-            />
           </div>
 
         {/* Branch behind remote warning */}

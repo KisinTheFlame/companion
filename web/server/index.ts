@@ -24,18 +24,12 @@ import { TerminalManager } from "./terminal-manager.js";
 import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { initLogFile, closeLogFile } from "./logger.js";
-import { CronScheduler } from "./cron-scheduler.js";
-import { AgentExecutor } from "./agent-executor.js";
 import { SessionOrchestrator } from "./session-orchestrator.js";
-import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
-import { migrateLinearCredentialsToAgents } from "./linear-credential-migration.js";
 import { authenticateManagedWebSocket } from "./ws-auth.js";
-import { LinearAgentBridge } from "./linear-agent-bridge.js";
 import { NoVncProxy } from "./novnc-proxy.js";
 
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
-import { restoreIfNeeded as restoreTailscaleFunnel, cleanup as cleanupTailscaleFunnel } from "./tailscale-manager.js";
 import { isRunningAsService } from "./service.js";
 import { getToken, verifyToken } from "./auth-manager.js";
 import { getCookie } from "hono/cookie";
@@ -59,13 +53,10 @@ const terminalManager = new TerminalManager();
 const noVncProxy = new NoVncProxy();
 const prPoller = new PRPoller(wsBridge);
 const recorder = new RecorderManager();
-const cronScheduler = new CronScheduler(launcher, wsBridge);
-const agentExecutor = new AgentExecutor(launcher, wsBridge);
-const linearAgentBridge = new LinearAgentBridge(agentExecutor, wsBridge);
 
 const orchestrator = new SessionOrchestrator({
   launcher, wsBridge, sessionStore, worktreeTracker,
-  prPoller, agentExecutor,
+  prPoller,
 });
 
 // ── Cloud relay connection (for receiving webhooks behind a firewall) ────────
@@ -131,7 +122,7 @@ if (managedAuthEnabled) {
 }
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(orchestrator, launcher, wsBridge, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, linearAgentBridge, port));
+app.route("/api", createRoutes(orchestrator, launcher, wsBridge, terminalManager, prPoller, recorder, port));
 
 // Dynamic manifest — embeds auth token in start_url so PWA auto-authenticates
 // on first launch. iOS gives standalone PWAs isolated storage from Safari,
@@ -330,21 +321,8 @@ if (process.env.NODE_ENV !== "production") {
   console.log("Dev mode: frontend at http://localhost:5174");
 }
 
-// ── Cron scheduler ──────────────────────────────────────────────────────────
-cronScheduler.startAll();
-
-// ── Agent system ────────────────────────────────────────────────────────────
-migrateCronJobsToAgents();
-migrateLinearCredentialsToAgents();
-agentExecutor.startAll();
-
 // ── Image pull manager — pre-pull missing Docker images for environments ────
 imagePullManager.initFromEnvironments();
-
-// ── Tailscale Funnel restoration ────────────────────────────────────────────
-restoreTailscaleFunnel(port).catch((err) => {
-  console.warn("[server] Tailscale Funnel restoration failed:", err);
-});
 
 // ── Update checker ──────────────────────────────────────────────────────────
 startPeriodicCheck();
@@ -387,7 +365,6 @@ setInterval(() => {
 function gracefulShutdown() {
   console.log("[server] Persisting container state before shutdown...");
   containerManager.persistState(CONTAINER_STATE_PATH);
-  cleanupTailscaleFunnel(port);
   closeLogFile();
   process.exit(0);
 }
