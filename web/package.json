@@ -38,8 +38,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:a11y": "vitest run --testNamePattern='axe accessibility|accessible names|aria-expanded'",
-    "test:codex-contract": "vitest run server/codex-protocol-*.test.ts",
-    "generate-token": "bun bin/generate-token.ts"
+    "test:codex-contract": "vitest run server/codex-protocol-*.test.ts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
@@ -61,7 +60,6 @@
     "diff": "^8.0.3",
     "fzf": "^0.5.2",
     "hono": "^4.7.0",
-    "qrcode": "^1.5.4",
     "ws": "^8.19.0"
   },
   "devDependencies": {
@@ -70,7 +68,6 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/bun": "^1.2.5",
-    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",

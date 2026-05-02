@@ -3,7 +3,6 @@ import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { api } from "./api.js";
 import { parseHash, navigateToSession } from "./utils/routing.js";
-import { LoginPage } from "./components/LoginPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -39,7 +38,6 @@ function useHash() {
 }
 
 export default function App() {
-  const isAuthenticated = useStore((s) => s.isAuthenticated);
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
@@ -127,18 +125,15 @@ export default function App() {
   }, []);
 
   // Load publicUrl from settings + check onboarding status.
-  // Re-runs when isAuthenticated flips to true (e.g. after login) so that
-  // users who authenticate first still see the onboarding wizard.
   const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {
-    if (!isAuthenticated) return;
     api.getSettings().then((s) => {
       if (s.publicUrl) useStore.getState().setPublicUrl(s.publicUrl);
       if (!s.onboardingCompleted) {
         setShowOnboarding(true);
       }
     }).catch(() => {});
-  }, [isAuthenticated]);
+  }, []);
 
   // Show Docker image update dialog if an app update just completed
   useEffect(() => {
@@ -147,11 +142,6 @@ export default function App() {
       useStore.getState().setDockerUpdateDialogOpen(true);
     }
   }, []);
-
-  // Auth gate: show login page when not authenticated
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
 
   if (route.page === "playground") {
     return <Suspense fallback={<LazyFallback />}><Playground /></Suspense>;

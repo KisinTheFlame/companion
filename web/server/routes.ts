@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
@@ -27,8 +26,6 @@ import { registerHubRoutes } from "./recording-hub/hub-routes.js";
 import { getSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
-import { verifyToken, getToken, regenerateToken, getAllAddresses } from "./auth-manager.js";
-import QRCode from "qrcode";
 import { VSCODE_EDITOR_CONTAINER_PORT, NOVNC_CONTAINER_PORT } from "./constants.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
@@ -50,113 +47,6 @@ export function createRoutes(
   port?: number,
 ) {
   const api = new Hono();
-
-  // ─── Auth endpoints (exempt from auth middleware) ──────────────────
-
-  api.post("/auth/verify", async (c) => {
-    const body = await c.req.json().catch(() => ({} as { token?: string }));
-    if (verifyToken(body.token)) {
-      // Set cookie so the dynamic manifest can embed the token in start_url.
-      // This bridges auth from Safari to standalone PWA on iOS (isolated storage).
-      setCookie(c, "companion_auth", body.token!, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "Strict",
-        maxAge: 365 * 24 * 60 * 60,
-      });
-      return c.json({ ok: true });
-    }
-    return c.json({ error: "Invalid token" }, 401);
-  });
-
-  api.get("/auth/qr", async (c) => {
-    // QR endpoint requires auth — only authenticated users can generate QR for mobile
-    const authHeader = c.req.header("Authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!isLocalhostRequest(c) && !verifyToken(token)) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
-
-    const port = Number(process.env.PORT) || (process.env.NODE_ENV === "production" ? 3456 : 3457);
-    const authToken = getToken();
-
-    // Build QR codes for each remote address (skip localhost — it auto-auths).
-    // Each QR encodes the full login URL so the native iPhone Camera app can
-    // open it directly: scan → tap popup → Safari opens → auto-authenticated.
-    const addresses = getAllAddresses().filter((a) => a.ip !== "localhost");
-    const qrCodes = await Promise.all(
-      addresses.map(async (a) => {
-        const loginUrl = `http://${a.ip}:${port}/?token=${authToken}`;
-        const qrDataUrl = await QRCode.toDataURL(loginUrl, { width: 256, margin: 2 });
-        return { label: a.label, url: `http://${a.ip}:${port}`, qrDataUrl };
-      }),
-    );
-
-    return c.json({ qrCodes });
-  });
-
-  // ─── Localhost auto-auth (exempt from auth middleware) ────────────
-  // Localhost users are on the same machine as the server, so they can
-  // auto-authenticate without a token. This makes first-launch seamless.
-
-  // Check if the request comes from localhost (same machine as the server).
-  // Uses Bun's requestIP which returns the actual TCP source address.
-  // Returns false in test environments where c.env is not a Bun server.
-  function isLocalhostRequest(c: { env: unknown; req: { raw: Request } }): boolean {
-    const bunServer = c.env as { requestIP?: (req: Request) => { address: string } | null };
-    const ip = bunServer?.requestIP?.(c.req.raw);
-    const addr = ip?.address ?? "";
-    return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
-  }
-
-  api.get("/auth/auto", (c) => {
-    if (isLocalhostRequest(c)) {
-      const token = getToken();
-      setCookie(c, "companion_auth", token, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "Strict",
-        maxAge: 365 * 24 * 60 * 60,
-      });
-      return c.json({ ok: true, token });
-    }
-    return c.json({ ok: false });
-  });
-
-  // ─── Auth middleware (protects all routes below) ───────────────────
-
-  api.use("/*", async (c, next) => {
-    // Skip auth for the verify endpoint (handled above)
-    if (c.req.path === "/auth/verify") {
-      return next();
-    }
-
-    // Localhost bypass — same machine as the server, always trusted
-    if (isLocalhostRequest(c)) {
-      return next();
-    }
-
-    const authHeader = c.req.header("Authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    // Also check the companion_auth cookie — iframes (browser preview) can't
-    // send Authorization headers, but browsers do forward cookies automatically.
-    const cookieToken = getCookie(c, "companion_auth") ?? null;
-    if (!verifyToken(token) && !verifyToken(cookieToken)) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
-    return next();
-  });
-
-  // ─── Auth management (protected) ──────────────────────────────────
-
-  api.get("/auth/token", (c) => {
-    return c.json({ token: getToken() });
-  });
-
-  api.post("/auth/regenerate", (c) => {
-    const token = regenerateToken();
-    return c.json({ token });
-  });
 
   // ─── SDK Sessions (--sdk-url) ─────────────────────────────────────
 

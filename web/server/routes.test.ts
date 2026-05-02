@@ -1,13 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
-// Mock auth-manager so all test requests pass the auth middleware
-vi.mock("./auth-manager.js", () => ({
-  verifyToken: vi.fn(() => true),
-  getToken: vi.fn(() => "test-token-for-routes"),
-  getLanAddress: vi.fn(() => "192.168.1.100"),
-  _resetForTest: vi.fn(),
-}));
-
 // Mock env-manager and git-utils modules before any imports
 vi.mock("./env-manager.js", () => ({
   listEnvs: vi.fn(() => []),
@@ -2060,39 +2052,6 @@ describe("POST /api/sessions/create-stream", () => {
     expect(doneEvent).toBeUndefined();
     const errorEvent = events.find((e) => e.event === "error");
     expect(errorEvent).toBeDefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Auth endpoints
-// ---------------------------------------------------------------------------
-
-describe("POST /api/auth/verify", () => {
-  it("returns ok:true for valid token", async () => {
-    // verifyToken is mocked to return true, so any token should succeed
-    const res = await app.request("/api/auth/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "test-token-for-routes" }),
-    });
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.ok).toBe(true);
-  });
-
-  it("returns 401 for invalid token", async () => {
-    // Temporarily override verifyToken to reject
-    const { verifyToken } = await import("./auth-manager.js");
-    (verifyToken as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
-
-    const res = await app.request("/api/auth/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "wrong" }),
-    });
-    expect(res.status).toBe(401);
-    const data = await res.json();
-    expect(data.error).toContain("Invalid token");
   });
 });
 

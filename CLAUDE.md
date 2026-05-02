@@ -22,10 +22,6 @@ cd web && bun run typecheck
 # Production build + serve
 cd web && bun run build && bun run start
 
-# Auth token management
-cd web && bun run generate-token          # show current token
-cd web && bun run generate-token --force  # regenerate a new token
-
 # Landing page (thecompanion.sh) — idempotent: starts if down, no-op if up
 # IMPORTANT: Always use this script to run the landing page. Never cd into landing/ and run bun/vite manually.
 ./scripts/landing-start.sh          # start

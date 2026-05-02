@@ -32,12 +32,6 @@ beforeEach(() => {
   mockNavigateBrowser.mockReset();
 });
 
-afterEach(() => {
-  // Clean up localStorage to prevent test leaks (e.g. companion_auth_token
-  // set during auth token injection tests). Using afterEach ensures cleanup
-  // runs even if an assertion throws.
-  localStorage.removeItem("companion_auth_token");
-});
 
 describe("SessionBrowserPane", () => {
   // ─── Render / loading state ───────────────────────────────────────────
@@ -217,24 +211,6 @@ describe("SessionBrowserPane", () => {
       const iframe = screen.getByTitle("Browser preview");
       expect(iframe).toBeInTheDocument();
       expect(iframe).toHaveAttribute("src", "/api/sessions/s1/browser/proxy/vnc.html?autoconnect=true");
-    });
-  });
-
-  // ─── Auth token injection ────────────────────────────────────────────
-  it("injects auth token into noVNC WebSocket path for remote server support", async () => {
-    // Simulate an auth token being stored (as happens on remote deployments)
-    localStorage.setItem("companion_auth_token", "test-secret-token");
-    mockStartBrowser.mockResolvedValue({
-      available: true,
-      mode: "container",
-      url: "/api/sessions/s1/browser/proxy/vnc.html?autoconnect=true&resize=scale&path=ws/novnc/s1",
-    });
-    render(<SessionBrowserPane sessionId="s1" />);
-    await waitFor(() => {
-      const iframe = screen.getByTitle("Browser preview");
-      expect(iframe).toBeInTheDocument();
-      // The path parameter should now include the token so noVNC forwards it on WS connect
-      expect(iframe.getAttribute("src")).toContain("path=ws%2Fnovnc%2Fs1%3Ftoken%3Dtest-secret-token");
     });
   });
 

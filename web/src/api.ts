@@ -2,33 +2,14 @@ import type { SdkSessionInfo } from "./types.js";
 import type { ContentBlock } from "./types.js";
 
 const BASE = "/api";
-const AUTH_STORAGE_KEY = "companion_auth_token";
-
-function getAuthHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const token = localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
-function handle401(status: number): void {
-  if (status === 401 && typeof window !== "undefined") {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    // Dynamic import to avoid circular dependency
-    import("./store.js").then(({ useStore }) => {
-      useStore.getState().logout();
-    }).catch(() => {});
-  }
-}
 
 async function post<T = unknown>(path: string, body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
@@ -36,11 +17,8 @@ async function post<T = unknown>(path: string, body?: object): Promise<T> {
 }
 
 async function get<T = unknown>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { ...getAuthHeaders() },
-  });
+  const res = await fetch(`${BASE}${path}`);
   if (!res.ok) {
-    handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
@@ -50,11 +28,10 @@ async function get<T = unknown>(path: string): Promise<T> {
 async function put<T = unknown>(path: string, body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
@@ -64,11 +41,10 @@ async function put<T = unknown>(path: string, body?: object): Promise<T> {
 async function patch<T = unknown>(path: string, body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
@@ -78,11 +54,10 @@ async function patch<T = unknown>(path: string, body?: object): Promise<T> {
 async function del<T = unknown>(path: string, body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
-    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...getAuthHeaders() },
+    headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || res.statusText);
   }
@@ -363,7 +338,7 @@ export async function createSessionStream(
 ): Promise<CreateSessionStreamResult> {
   const res = await fetch(`${BASE}/sessions/create-stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts ?? {}),
   });
 
@@ -414,54 +389,7 @@ export async function createSessionStream(
   return result;
 }
 
-/**
- * Verify an auth token with the server.
- * This does NOT use the auth header helpers since it's called before auth is established.
- */
-/**
- * Attempt auto-authentication for localhost users.
- * The server returns the token if the request comes from 127.0.0.1/::1.
- * No auth header needed — this is a pre-auth endpoint.
- */
-export async function autoAuth(): Promise<string | null> {
-  try {
-    const res = await fetch(`${BASE}/auth/auto`);
-    if (res.ok) {
-      const data = await res.json() as { ok: boolean; token?: string };
-      if (data.ok && data.token) return data.token;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export async function verifyAuthToken(token: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/auth/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return !!(data as { ok?: boolean }).ok;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 export const api = {
-  // Auth
-  getAuthQr: () =>
-    get<{ qrCodes: { label: string; url: string; qrDataUrl: string }[] }>("/auth/qr"),
-  getAuthToken: () =>
-    get<{ token: string }>("/auth/token"),
-  regenerateAuthToken: () =>
-    post<{ token: string }>("/auth/regenerate"),
-
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
       "/sessions/create",
@@ -651,11 +579,8 @@ export const api = {
       `/fs/read?path=${encodeURIComponent(path)}`,
     ),
   getFileBlob: async (path: string): Promise<string> => {
-    const res = await fetch(`${BASE}/fs/raw?path=${encodeURIComponent(path)}`, {
-      headers: { ...getAuthHeaders() },
-    });
+    const res = await fetch(`${BASE}/fs/raw?path=${encodeURIComponent(path)}`);
     if (!res.ok) {
-      handle401(res.status);
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error((err as { error?: string }).error || res.statusText);
     }

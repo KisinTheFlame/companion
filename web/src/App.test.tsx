@@ -2,15 +2,13 @@
 /**
  * Tests for the root App component.
  *
- * App is the top-level layout that gates on authentication. When
- * `isAuthenticated` is false it renders <LoginPage />. When authenticated
- * it renders the full chrome (Sidebar, TopBar, routed pages).
+ * App is the top-level layout. The auth gate has been removed; the app
+ * always renders the full chrome (Sidebar, TopBar, routed pages).
  *
  * Coverage targets:
  * - Render test and axe accessibility scan
- * - Auth gate: unauthenticated renders LoginPage
- * - Authenticated home: renders Sidebar, TopBar, HomePage
- * - Authenticated session: renders ChatView within session layout
+ * - Home: renders Sidebar, TopBar, HomePage
+ * - Session: renders ChatView within session layout
  * - Dark mode class toggling
  * - Playground route renders lazy Playground
  * - Various page routes (settings, environments, etc.)
@@ -23,7 +21,6 @@ import "@testing-library/jest-dom";
 const { mockStoreState, mockGetState } = vi.hoisted(() => {
   const mockGetState = vi.fn();
   const mockStoreState: Record<string, unknown> = {
-    isAuthenticated: false,
     darkMode: false,
     currentSessionId: null,
     sidebarOpen: false,
@@ -81,12 +78,6 @@ vi.mock("./utils/routing.js", () => ({
 }));
 
 // ─── Component mocks ─────────────────────────────────────────────
-// Mock all child components so we can assert their presence without
-// pulling in their full dependency trees.
-
-vi.mock("./components/LoginPage.js", () => ({
-  LoginPage: () => <div data-testid="login-page">LoginPage</div>,
-}));
 
 vi.mock("./components/Sidebar.js", () => ({
   Sidebar: () => <div data-testid="sidebar">Sidebar</div>,
@@ -132,6 +123,10 @@ vi.mock("./components/DockerUpdateDialog.js", () => ({
   DockerUpdateDialog: () => <div data-testid="docker-update-dialog">DockerUpdateDialog</div>,
 }));
 
+vi.mock("./components/OnboardingModal.js", () => ({
+  OnboardingModal: () => <div data-testid="onboarding-modal">OnboardingModal</div>,
+}));
+
 // Lazy-loaded pages: mock each module so dynamic import() resolves immediately
 vi.mock("./components/Playground.js", () => ({
   Playground: () => <div data-testid="playground">Playground</div>,
@@ -143,6 +138,10 @@ vi.mock("./components/SettingsPage.js", () => ({
 
 vi.mock("./components/EnvManager.js", () => ({
   EnvManager: () => <div data-testid="env-manager">EnvManager</div>,
+}));
+
+vi.mock("./components/SandboxManager.js", () => ({
+  SandboxManager: () => <div data-testid="sandbox-manager">SandboxManager</div>,
 }));
 
 // ─── Import SUT after mocks ─────────────────────────────────────
@@ -159,9 +158,7 @@ function setStoreValues(overrides: Record<string, unknown>) {
 // ─── Setup ───────────────────────────────────────────────────────
 beforeEach(() => {
   vi.clearAllMocks();
-  // Reset to default unauthenticated state
   Object.assign(mockStoreState, {
-    isAuthenticated: false,
     darkMode: false,
     currentSessionId: null,
     sidebarOpen: false,
@@ -195,30 +192,10 @@ beforeEach(() => {
 // ─── Tests ───────────────────────────────────────────────────────
 
 describe("App", () => {
-  describe("auth gate", () => {
-    it("renders LoginPage when not authenticated", () => {
-      // When isAuthenticated is false the auth gate should show LoginPage
-      // and nothing from the main layout should be visible.
+  describe("layout", () => {
+    it("renders Sidebar, TopBar, UpdateBanner, and HomePage on the home route with no session", () => {
       render(<App />);
 
-      expect(screen.getByTestId("login-page")).toBeInTheDocument();
-      expect(screen.queryByTestId("sidebar")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("topbar")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("home-page")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("authenticated layout", () => {
-    beforeEach(() => {
-      setStoreValues({ isAuthenticated: true });
-    });
-
-    it("renders Sidebar, TopBar, UpdateBanner, and HomePage when on home route with no session", () => {
-      // Authenticated user on the home route (no active session) should see the
-      // full chrome: sidebar, topbar, update banner, and the home page content.
-      render(<App />);
-
-      expect(screen.queryByTestId("login-page")).not.toBeInTheDocument();
       expect(screen.getByTestId("sidebar")).toBeInTheDocument();
       expect(screen.getByTestId("topbar")).toBeInTheDocument();
       expect(screen.getByTestId("update-banner")).toBeInTheDocument();
@@ -244,7 +221,6 @@ describe("App", () => {
     });
 
     it("renders TaskPanel when session active and taskPanelOpen", () => {
-      // When taskPanelOpen is true and we have a session, the task panel should appear.
       (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "session", sessionId: "s1" });
       setStoreValues({ currentSessionId: "s1", taskPanelOpen: true });
       render(<App />);
@@ -253,7 +229,6 @@ describe("App", () => {
     });
 
     it("renders SessionLaunchOverlay during session creation", () => {
-      // While a session is being created, the overlay should appear over the home page.
       setStoreValues({
         sessionCreating: true,
         creationProgress: [{ label: "Starting...", status: "done" }],
@@ -266,10 +241,6 @@ describe("App", () => {
   });
 
   describe("route-level pages", () => {
-    beforeEach(() => {
-      setStoreValues({ isAuthenticated: true });
-    });
-
     it("renders SettingsPage for settings route", async () => {
       (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "settings" });
       render(<App />);
@@ -287,14 +258,11 @@ describe("App", () => {
     });
 
     it("renders Playground for playground route", async () => {
-      // The playground route skips the normal layout entirely and renders
-      // just the Playground component in a Suspense boundary.
       (parseHash as ReturnType<typeof vi.fn>).mockReturnValue({ page: "playground" });
       render(<App />);
       await waitFor(() => {
         expect(screen.getByTestId("playground")).toBeInTheDocument();
       });
-      // Playground route should NOT have sidebar/topbar
       expect(screen.queryByTestId("sidebar")).not.toBeInTheDocument();
       expect(screen.queryByTestId("topbar")).not.toBeInTheDocument();
     });
@@ -302,10 +270,7 @@ describe("App", () => {
 
   describe("docker update dialog activation", () => {
     it("opens DockerUpdateDialog and clears localStorage when companion_docker_prompt_pending is set", () => {
-      // After an app update, the localStorage flag triggers the Docker update dialog.
-      // This useEffect reads the flag, removes it, and opens the dialog via the store.
       localStorage.setItem("companion_docker_prompt_pending", "1");
-      setStoreValues({ isAuthenticated: true });
       render(<App />);
 
       expect(mockStoreState.setDockerUpdateDialogOpen).toHaveBeenCalledWith(true);
@@ -313,39 +278,24 @@ describe("App", () => {
     });
 
     it("does not open DockerUpdateDialog on normal page load", () => {
-      // Without the localStorage flag, the dialog should not be triggered.
-      setStoreValues({ isAuthenticated: true });
       render(<App />);
-
       expect(mockStoreState.setDockerUpdateDialogOpen).not.toHaveBeenCalled();
     });
   });
 
   describe("dark mode", () => {
     it("toggles dark class on document element based on darkMode state", () => {
-      // The App applies/removes the "dark" class on <html> via an effect.
-      setStoreValues({ isAuthenticated: false, darkMode: true });
+      setStoreValues({ darkMode: true });
       render(<App />);
       expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-      // Clean up for other tests
       document.documentElement.classList.remove("dark");
     });
   });
 
   describe("accessibility", () => {
-    it("passes axe accessibility checks when unauthenticated (LoginPage)", async () => {
-      // The login page rendered by the auth gate should have no a11y violations.
+    it("passes axe accessibility checks on the home page", async () => {
       const { axe } = await import("vitest-axe");
-      const { container } = render(<App />);
-      const results = await axe(container);
-      expect(results).toHaveNoViolations();
-    });
-
-    it("passes axe accessibility checks when authenticated (home page)", async () => {
-      // The full authenticated layout on the home route should pass axe checks.
-      const { axe } = await import("vitest-axe");
-      setStoreValues({ isAuthenticated: true });
       const { container } = render(<App />);
       const results = await axe(container);
       expect(results).toHaveNoViolations();

@@ -621,33 +621,6 @@ describe("MCP Servers", () => {
   });
 });
 
-// ─── Auth actions ────────────────────────────────────────────────────────────
-
-describe("Auth actions", () => {
-  it("setAuthToken: persists token to localStorage and sets isAuthenticated true", () => {
-    useStore.getState().setAuthToken("my-secret-token");
-
-    const state = useStore.getState();
-    expect(state.authToken).toBe("my-secret-token");
-    expect(state.isAuthenticated).toBe(true);
-    expect(localStorage.getItem("companion_auth_token")).toBe("my-secret-token");
-  });
-
-  it("logout: removes token from localStorage and sets isAuthenticated false", () => {
-    // First authenticate
-    useStore.getState().setAuthToken("token-123");
-    expect(useStore.getState().isAuthenticated).toBe(true);
-
-    // Then logout
-    useStore.getState().logout();
-
-    const state = useStore.getState();
-    expect(state.authToken).toBeNull();
-    expect(state.isAuthenticated).toBe(false);
-    expect(localStorage.getItem("companion_auth_token")).toBeNull();
-  });
-});
-
 // ─── Notification settings ───────────────────────────────────────────────────
 
 describe("Notification settings", () => {

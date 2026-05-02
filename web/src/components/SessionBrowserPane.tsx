@@ -28,13 +28,8 @@ export function SessionBrowserPane({ sessionId }: SessionBrowserPaneProps) {
         setBrowserMode("host");
         setLoading(false);
       } else if (result.available && result.url) {
-        // Container mode — inject auth token into noVNC WebSocket path
-        const token = localStorage.getItem("companion_auth_token") || "";
+        // Container mode — proxy-based noVNC iframe
         const url = new URL(result.url, window.location.origin);
-        const wsPath = url.searchParams.get("path");
-        if (wsPath && token) {
-          url.searchParams.set("path", `${wsPath}?token=${encodeURIComponent(token)}`);
-        }
         setBrowserUrl(url.pathname + url.search);
         setBrowserMode("container");
       } else {

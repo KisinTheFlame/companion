@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { createAuthSlice, type AuthSlice } from "./auth-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions-slice.js";
 import { createChatSlice, type ChatSlice } from "./chat-slice.js";
 import { createPermissionsSlice, type PermissionsSlice } from "./permissions-slice.js";
@@ -8,8 +7,7 @@ import { createUiSlice, type UiSlice, getInitialDiffBase } from "./ui-slice.js";
 import { createTerminalSlice, type TerminalSlice, getInitialQuickTerminalPlacement } from "./terminal-slice.js";
 import { createUpdatesSlice, type UpdatesSlice } from "./updates-slice.js";
 
-export type AppState = AuthSlice &
-  SessionsSlice &
+export type AppState = SessionsSlice &
   ChatSlice &
   PermissionsSlice &
   TasksSlice &
@@ -20,7 +18,6 @@ export type AppState = AuthSlice &
   };
 
 export const useStore = create<AppState>((...args) => ({
-  ...createAuthSlice(...args),
   ...createSessionsSlice(...args),
   ...createChatSlice(...args),
   ...createPermissionsSlice(...args),

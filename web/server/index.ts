@@ -25,14 +25,11 @@ import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { initLogFile, closeLogFile } from "./logger.js";
 import { SessionOrchestrator } from "./session-orchestrator.js";
-import { authenticateManagedWebSocket } from "./ws-auth.js";
 import { NoVncProxy } from "./novnc-proxy.js";
 
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { isRunningAsService } from "./service.js";
-import { getToken, verifyToken } from "./auth-manager.js";
-import { getCookie } from "hono/cookie";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
@@ -107,26 +104,9 @@ app.get("/health", (c) => {
   });
 });
 
-// ── Managed auth middleware — only active when COMPANION_AUTH_ENABLED=1 ────
-const hasManagedAuthSecret = Boolean(process.env.COMPANION_AUTH_SECRET?.trim());
-const managedAuthEnabled =
-  process.env.COMPANION_AUTH_ENABLED === "1" ||
-  (hasManagedAuthSecret && process.env.COMPANION_AUTH_ENABLED !== "0");
-
-if (managedAuthEnabled) {
-  const { managedAuth } = await import("./middleware/managed-auth.js");
-  app.use("/*", managedAuth);
-  console.log("[server] Managed auth enabled");
-} else {
-  console.log("[server] Managed auth disabled");
-}
-
 app.use("/api/*", cors());
 app.route("/api", createRoutes(orchestrator, launcher, wsBridge, terminalManager, prPoller, recorder, port));
 
-// Dynamic manifest — embeds auth token in start_url so PWA auto-authenticates
-// on first launch. iOS gives standalone PWAs isolated storage from Safari,
-// so this is the only way to bridge auth across the install boundary.
 app.get("/manifest.json", (c) => {
   const manifest = {
     name: "The Companion",
@@ -142,22 +122,6 @@ app.get("/manifest.json", (c) => {
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
     ],
   };
-
-  // If the user has an auth cookie (set during login), embed token in start_url.
-  // Safari sends this cookie when fetching the manifest at "Add to Home Screen" time.
-  const authCookie = getCookie(c, "companion_auth");
-  if (authCookie && verifyToken(authCookie)) {
-    manifest.start_url = `/?token=${authCookie}`;
-  } else {
-    // Localhost bypass — always embed the token for same-machine installs
-    const bunServer = c.env as { requestIP?: (req: Request) => { address: string } | null };
-    const ip = bunServer?.requestIP?.(c.req.raw);
-    const addr = ip?.address ?? "";
-    if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") {
-      manifest.start_url = `/?token=${getToken()}`;
-    }
-  }
-
   c.header("Content-Type", "application/manifest+json");
   return c.json(manifest);
 });
@@ -188,25 +152,9 @@ const server = Bun.serve<SocketData>({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
-    // Helper: check if request is from localhost (same machine)
-    const reqIp = server.requestIP(req);
-    const reqAddr = reqIp?.address ?? "";
-    const isLocalhost = reqAddr === "127.0.0.1" || reqAddr === "::1" || reqAddr === "::ffff:127.0.0.1";
-
     // ── Browser WebSocket — connects to a specific session ─────────────
     const browserMatch = url.pathname.match(/^\/ws\/browser\/([a-f0-9-]+)$/);
     if (browserMatch) {
-      if (managedAuthEnabled) {
-        const auth = await authenticateManagedWebSocket(req);
-        if (!auth.ok) {
-          return new Response(auth.body || "Unauthorized", { status: auth.status });
-        }
-      } else {
-        const wsToken = url.searchParams.get("token");
-        if (!isLocalhost && !verifyToken(wsToken)) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-      }
       const sessionId = browserMatch[1];
       const upgraded = server.upgrade(req, {
         data: { kind: "browser" as const, sessionId },
@@ -218,17 +166,6 @@ const server = Bun.serve<SocketData>({
     // ── Terminal WebSocket — embedded terminal PTY connection ─────────
     const termMatch = url.pathname.match(/^\/ws\/terminal\/([a-f0-9-]+)$/);
     if (termMatch) {
-      if (managedAuthEnabled) {
-        const auth = await authenticateManagedWebSocket(req);
-        if (!auth.ok) {
-          return new Response(auth.body || "Unauthorized", { status: auth.status });
-        }
-      } else {
-        const wsToken = url.searchParams.get("token");
-        if (!isLocalhost && !verifyToken(wsToken)) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-      }
       const terminalId = termMatch[1];
       const upgraded = server.upgrade(req, {
         data: { kind: "terminal" as const, terminalId },
@@ -240,17 +177,6 @@ const server = Bun.serve<SocketData>({
     // ── noVNC WebSocket — proxies VNC data to container's websockify ────
     const novncMatch = url.pathname.match(/^\/ws\/novnc\/([a-f0-9-]+)$/);
     if (novncMatch) {
-      if (managedAuthEnabled) {
-        const auth = await authenticateManagedWebSocket(req);
-        if (!auth.ok) {
-          return new Response(auth.body || "Unauthorized", { status: auth.status });
-        }
-      } else {
-        const wsToken = url.searchParams.get("token");
-        if (!isLocalhost && !verifyToken(wsToken)) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-      }
       const sessionId = novncMatch[1];
       const upgraded = server.upgrade(req, {
         data: { kind: "novnc" as const, sessionId },
@@ -306,13 +232,7 @@ const server = Bun.serve<SocketData>({
   },
 });
 
-const authToken = getToken();
 console.log(`Server running on http://${host}:${server.port}`);
-console.log();
-console.log(`  Auth token: ${authToken}`);
-if (process.env.COMPANION_AUTH_TOKEN) {
-  console.log("  (using COMPANION_AUTH_TOKEN env var)");
-}
 console.log();
 console.log(`  CLI WebSocket:     ws://localhost:${server.port}/ws/cli/:sessionId`);
 console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sessionId`);

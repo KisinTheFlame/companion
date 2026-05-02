@@ -63,9 +63,6 @@ const mockApi = {
   updateSettings: vi.fn(),
   forceCheckForUpdate: vi.fn(),
   triggerUpdate: vi.fn(),
-  getAuthToken: vi.fn(),
-  regenerateAuthToken: vi.fn(),
-  getAuthQr: vi.fn(),
 };
 
 vi.mock("../api.js", () => ({
@@ -74,9 +71,6 @@ vi.mock("../api.js", () => ({
     updateSettings: (...args: unknown[]) => mockApi.updateSettings(...args),
     forceCheckForUpdate: (...args: unknown[]) => mockApi.forceCheckForUpdate(...args),
     triggerUpdate: (...args: unknown[]) => mockApi.triggerUpdate(...args),
-    getAuthToken: (...args: unknown[]) => mockApi.getAuthToken(...args),
-    regenerateAuthToken: (...args: unknown[]) => mockApi.regenerateAuthToken(...args),
-    getAuthQr: (...args: unknown[]) => mockApi.getAuthQr(...args),
   },
 }));
 
@@ -112,14 +106,6 @@ beforeEach(() => {
   mockApi.triggerUpdate.mockResolvedValue({
     ok: true,
     message: "Update started. Server will restart shortly.",
-  });
-  mockApi.getAuthToken.mockResolvedValue({ token: "abc123testtoken" });
-  mockApi.regenerateAuthToken.mockResolvedValue({ token: "newtoken456" });
-  mockApi.getAuthQr.mockResolvedValue({
-    qrCodes: [
-      { label: "LAN", url: "http://192.168.1.10:3456", qrDataUrl: "data:image/png;base64,LAN_QR" },
-      { label: "Tailscale", url: "http://100.118.112.23:3456", qrDataUrl: "data:image/png;base64,TS_QR" },
-    ],
   });
 });
 
@@ -264,109 +250,9 @@ describe("SettingsPage", () => {
 
     expect(document.getElementById("general")).toBeInTheDocument();
     expect(document.getElementById("webhooks")).toBeInTheDocument();
-    expect(document.getElementById("authentication")).toBeInTheDocument();
     expect(document.getElementById("notifications")).toBeInTheDocument();
     expect(document.getElementById("updates")).toBeInTheDocument();
     expect(document.getElementById("environments")).toBeInTheDocument();
-  });
-
-  // ─── Authentication section tests ──────────────────────────────────
-
-  // The auth section fetches the token on mount and displays it masked.
-  it("fetches and displays the auth token masked by default", async () => {
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    // Token should be fetched
-    expect(mockApi.getAuthToken).toHaveBeenCalledTimes(1);
-
-    // Token is masked by default — shows dots, not the actual value
-    await waitFor(() => {
-      expect(screen.getByText("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("abc123testtoken")).not.toBeInTheDocument();
-  });
-
-  // Clicking "Show" reveals the actual token value.
-  it("reveals the token when Show is clicked", async () => {
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    await waitFor(() => {
-      expect(screen.getByText("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByTitle("Show token"));
-    expect(screen.getByText("abc123testtoken")).toBeInTheDocument();
-  });
-
-  // Clicking "Show QR Code" loads and displays QR with address tabs.
-  it("shows QR code with address tabs when button is clicked", async () => {
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Show QR Code" }));
-
-    await waitFor(() => {
-      expect(mockApi.getAuthQr).toHaveBeenCalledTimes(1);
-    });
-
-    // First address (LAN) QR should be shown by default
-    const img = await screen.findByAltText("QR code for LAN login");
-    expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", "data:image/png;base64,LAN_QR");
-
-    // Address tabs should be visible (LAN and Tailscale)
-    expect(screen.getByRole("button", { name: "LAN" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tailscale" })).toBeInTheDocument();
-
-    // Clicking Tailscale tab switches the QR code
-    fireEvent.click(screen.getByRole("button", { name: "Tailscale" }));
-    const tsImg = screen.getByAltText("QR code for Tailscale login");
-    expect(tsImg).toHaveAttribute("src", "data:image/png;base64,TS_QR");
-    expect(screen.getByText("http://100.118.112.23:3456")).toBeInTheDocument();
-  });
-
-  // Regenerating the token calls the API and reveals the new token.
-  it("regenerates the token after user confirms", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate Token" }));
-
-    await waitFor(() => {
-      expect(mockApi.regenerateAuthToken).toHaveBeenCalledTimes(1);
-    });
-
-    // New token is revealed automatically after regeneration
-    expect(await screen.findByText("newtoken456")).toBeInTheDocument();
-
-    (window.confirm as ReturnType<typeof vi.spyOn>).mockRestore();
-  });
-
-  // Cancelling the confirmation dialog skips regeneration entirely.
-  it("does not regenerate when user cancels confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate Token" }));
-
-    expect(mockApi.regenerateAuthToken).not.toHaveBeenCalled();
-
-    (window.confirm as ReturnType<typeof vi.spyOn>).mockRestore();
-  });
-
-  // The Authentication navigation item appears in the sidebar.
-  it("includes Authentication in category navigation", async () => {
-    render(<SettingsPage />);
-    await screen.findByRole("button", { name: "Save Public URL" });
-
-    const authButtons = screen.getAllByRole("button", { name: "Authentication" });
-    expect(authButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   // ─── Update Channel section tests ──────────────────────────────────
