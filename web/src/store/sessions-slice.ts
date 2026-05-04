@@ -27,13 +27,6 @@ function getInitialCollapsedProjects(): Set<string> {
   }
 }
 
-export interface RelaunchStatus {
-  attempt: number;
-  maxAttempts: number;
-  nextRetryAt: number | null;
-  exhausted: boolean;
-}
-
 export interface SessionsSlice {
   sessions: Map<string, SessionState>;
   sdkSessions: SdkSessionInfo[];
@@ -41,7 +34,6 @@ export interface SessionsSlice {
   connectionStatus: Map<string, "connecting" | "connected" | "disconnected">;
   cliConnected: Map<string, boolean>;
   cliReconnecting: Map<string, boolean>;
-  relaunchStatus: Map<string, RelaunchStatus>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   previousPermissionMode: Map<string, string>;
   sessionNames: Map<string, string>;
@@ -58,7 +50,6 @@ export interface SessionsSlice {
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setCliReconnecting: (sessionId: string, reconnecting: boolean) => void;
-  setRelaunchStatus: (sessionId: string, status: RelaunchStatus | null) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
   setSessionName: (sessionId: string, name: string) => void;
@@ -76,7 +67,6 @@ export const createSessionsSlice: StateCreator<AppState, [], [], SessionsSlice> 
   connectionStatus: new Map(),
   cliConnected: new Map(),
   cliReconnecting: new Map(),
-  relaunchStatus: new Map(),
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
   sessionNames: getInitialSessionNames(),
@@ -126,7 +116,6 @@ export const createSessionsSlice: StateCreator<AppState, [], [], SessionsSlice> 
         connectionStatus: deleteFromMap(s.connectionStatus, sessionId),
         cliConnected: deleteFromMap(s.cliConnected, sessionId),
         cliReconnecting: deleteFromMap(s.cliReconnecting, sessionId),
-        relaunchStatus: deleteFromMap(s.relaunchStatus, sessionId),
         sessionStatus: deleteFromMap(s.sessionStatus, sessionId),
         previousPermissionMode: deleteFromMap(s.previousPermissionMode, sessionId),
         sessionNames,
@@ -180,17 +169,6 @@ export const createSessionsSlice: StateCreator<AppState, [], [], SessionsSlice> 
         cliReconnecting.delete(sessionId);
       }
       return { cliReconnecting };
-    }),
-
-  setRelaunchStatus: (sessionId, status) =>
-    set((s) => {
-      const relaunchStatus = new Map(s.relaunchStatus);
-      if (status === null) {
-        relaunchStatus.delete(sessionId);
-      } else {
-        relaunchStatus.set(sessionId, status);
-      }
-      return { relaunchStatus };
     }),
 
   setSessionStatus: (sessionId, status) =>

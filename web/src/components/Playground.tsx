@@ -2681,47 +2681,6 @@ function PlaygroundSessionItems() {
         </div>
       </Card>
 
-      {/* Auto-relaunch retry — countdown */}
-      <Card label="Auto-relaunch — retrying with backoff">
-        <div className="bg-cc-sidebar rounded-lg p-1">
-          <SessionItem
-            session={mockSession({
-              isReconnecting: true,
-              relaunchAttempt: 2,
-              relaunchMaxAttempts: 6,
-              relaunchNextRetryAt: Date.now() + 7_000,
-              relaunchExhausted: false,
-            })}
-            isActive={false}
-            sessionName="Container flaky"
-            permCount={0}
-            isRecentlyRenamed={false}
-            {...noopSessionItemProps}
-          />
-        </div>
-      </Card>
-
-      {/* Auto-relaunch retry — exhausted */}
-      <Card label="Auto-relaunch — budget exhausted">
-        <div className="bg-cc-sidebar rounded-lg p-1">
-          <SessionItem
-            session={mockSession({
-              isConnected: false,
-              isReconnecting: false,
-              relaunchAttempt: 6,
-              relaunchMaxAttempts: 6,
-              relaunchNextRetryAt: null,
-              relaunchExhausted: true,
-            })}
-            isActive={false}
-            sessionName="Container deleted externally"
-            permCount={0}
-            isRecentlyRenamed={false}
-            {...noopSessionItemProps}
-          />
-        </div>
-      </Card>
-
       {/* Exited */}
       <Card label="Exited — session stopped">
         <div className="bg-cc-sidebar rounded-lg p-1">

@@ -47,7 +47,6 @@ interface MockStoreState {
   connectionStatus: Map<string, "connecting" | "connected" | "disconnected">;
   cliConnected: Map<string, boolean>;
   cliReconnecting: Map<string, boolean>;
-  relaunchStatus: Map<string, { attempt: number; maxAttempts: number; nextRetryAt: number | null; exhausted: boolean }>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   sessionNames: Map<string, string>;
   recentlyRenamed: Set<string>;
@@ -114,7 +113,6 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     connectionStatus: new Map(),
     cliConnected: new Map(),
     cliReconnecting: new Map(),
-    relaunchStatus: new Map(),
     sessionStatus: new Map(),
     sessionNames: new Map(),
     recentlyRenamed: new Set(),

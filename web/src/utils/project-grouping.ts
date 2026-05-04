@@ -17,10 +17,6 @@ export interface SessionItem {
   backendType: "claude" | "codex";
   repoRoot: string;
   permCount: number;
-  relaunchAttempt?: number;
-  relaunchMaxAttempts?: number;
-  relaunchNextRetryAt?: number | null;
-  relaunchExhausted?: boolean;
   cronJobId?: string;
   cronJobName?: string;
   agentId?: string;

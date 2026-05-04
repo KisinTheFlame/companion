@@ -356,13 +356,6 @@ export type BrowserIncomingMessageBase =
   | { type: "pr_status_update"; pr: import("./github-pr.js").GitHubPRInfo | null; available: boolean }
   | { type: "mcp_status"; servers: McpServerDetail[] }
   | { type: "session_phase"; phase: SessionPhase; previousPhase: SessionPhase }
-  | {
-      type: "relaunch_status";
-      attempt: number;
-      maxAttempts: number;
-      nextRetryAt: number | null;
-      exhausted: boolean;
-    }
   | { type: "prompt_suggestion"; suggestions: string[] }
   | { type: "streamlined_text"; text: string }
   | { type: "streamlined_tool_use_summary"; tool_summary: string };

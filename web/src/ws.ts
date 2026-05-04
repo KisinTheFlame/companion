@@ -988,9 +988,6 @@ function handleParsedMessage(
       } else {
         store.setCliConnected(sessionId, true);
         store.setCliReconnecting(sessionId, false);
-        // Reaching any live phase means the CLI is back — drop the retry
-        // counter so the sidebar stops showing "retrying N/M".
-        store.setRelaunchStatus(sessionId, null);
         if (phase === "ready") store.setSessionStatus(sessionId, "idle");
         else if (phase === "streaming") store.setSessionStatus(sessionId, "running");
         else if (phase === "compacting") store.setSessionStatus(sessionId, "compacting");
@@ -1009,26 +1006,6 @@ function handleParsedMessage(
     case "cli_connected": {
       store.setCliConnected(sessionId, true);
       store.setCliReconnecting(sessionId, false);
-      // CLI is back — clear any lingering retry counter so the sidebar drops
-      // the "retrying N/M" hint.
-      store.setRelaunchStatus(sessionId, null);
-      break;
-    }
-
-    case "relaunch_status": {
-      // Clear status when the orchestrator signals success (attempt=0,
-      // exhausted=false, no nextRetryAt). Otherwise keep it so the sidebar
-      // can render "retrying N/M" or the exhaustion message.
-      if (!data.exhausted && data.attempt === 0 && data.nextRetryAt === null) {
-        store.setRelaunchStatus(sessionId, null);
-      } else {
-        store.setRelaunchStatus(sessionId, {
-          attempt: data.attempt,
-          maxAttempts: data.maxAttempts,
-          nextRetryAt: data.nextRetryAt,
-          exhausted: data.exhausted,
-        });
-      }
       break;
     }
 
